@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1200</width>
+    <height>750</height>
+   </rect>
+  </property>
+
+  <property name="windowTitle">
+   <string>Face Detection App</string>
+  </property>
+
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QVBoxLayout">
+
+    <item>
+     <widget class="QTabWidget" name="tabWidget">
+
+      <!-- ================= TAB STYLE (BLACK TOP BAR) ================= -->
+      <property name="styleSheet">
+       <string>
+QTabWidget::pane {
+    border: 0;
+}
+
+QTabBar::tab {
+    background: #000000;
+    color: white;
+    padding: 10px 25px;
+    border: 1px solid #222;
+    font-size: 12pt;
+}
+
+QTabBar::tab:selected {
+    background: #1e1e1e;
+    border-bottom: 2px solid #ffffff;
+}
+
+QTabBar::tab:hover {
+    background: #2a2a2a;
+}
+       </string>
+      </property>
+
+      <!-- ═════════════════ FACE DETECTION TAB ═════════════════ -->
+      <widget class="QWidget" name="faceDetectionTab">
+       <attribute name="title">
+        <string>Face Detection</string>
+       </attribute>
+
+       <layout class="QHBoxLayout">
+
+        <!-- LEFT PANEL -->
+        <item>
+         <widget class="QWidget" name="faceLeftPanel">
+          <property name="maximumWidth">
+           <number>350</number>
+          </property>
+
+          <layout class="QVBoxLayout">
+
+           <!-- Image Name -->
+           <item>
+            <widget class="QLabel" name="faceImageNameLbl">
+             <property name="text">
+              <string>No image loaded</string>
+             </property>
+            </widget>
+           </item>
+
+           <!-- Load Button -->
+           <item>
+            <widget class="QPushButton" name="faceBtnLoad">
+             <property name="text">
+              <string>📂 Load Image</string>
+             </property>
+            </widget>
+           </item>
+
+           <!-- Run Button -->
+           <item>
+            <widget class="QPushButton" name="faceBtnRun">
+             <property name="text">
+              <string>▶ Run Detection</string>
+             </property>
+             <property name="enabled">
+              <bool>false</bool>
+             </property>
+            </widget>
+           </item>
+
+           <!-- Stats -->
+           <item>
+            <widget class="QLabel" name="faceStatsLbl">
+             <property name="text">
+              <string>—</string>
+             </property>
+             <property name="wordWrap">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+
+           <!-- Save -->
+           <item>
+            <widget class="QPushButton" name="faceBtnSave">
+             <property name="text">
+              <string>💾 Save Result</string>
+             </property>
+             <property name="enabled">
+              <bool>false</bool>
+             </property>
+            </widget>
+           </item>
+
+           <item>
+            <spacer>
+             <property name="orientation">
+              <enum>Qt::Vertical</enum>
+             </property>
+            </spacer>
+           </item>
+
+          </layout>
+         </widget>
+        </item>
+
+        <!-- RIGHT CANVAS -->
+        <item>
+         <widget class="QLabel" name="faceCanvasLabel">
+          <property name="text">
+           <string>Load an image to begin</string>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignCenter</set>
+          </property>
+          <property name="minimumSize">
+           <size>
+            <width>500</width>
+            <height>400</height>
+           </size>
+          </property>
+         </widget>
+        </item>
+
+       </layout>
+      </widget>
+
+     </widget>
+    </item>
+
+   </layout>
+  </widget>
+
+  <!-- MENU -->
+  <widget class="QMenuBar" name="menubar">
+   <widget class="QMenu" name="menuFile">
+    <property name="title"><string>&amp;File</string></property>
+    <addaction name="actionQuit"/>
+   </widget>
+
+   <widget class="QMenu" name="menuHelp">
+    <property name="title"><string>&amp;Help</string></property>
+    <addaction name="actionAbout"/>
+   </widget>
+
+   <addaction name="menuFile"/>
+   <addaction name="menuHelp"/>
+  </widget>
+
+  <widget class="QStatusBar" name="statusbar"/>
+
+  <action name="actionQuit">
+   <property name="text"><string>Quit</string></property>
+  </action>
+
+  <action name="actionAbout">
+   <property name="text"><string>About</string></property>
+  </action>
+
+ </widget>
+
+ <resources/>
+ <connections/>
+</ui>
