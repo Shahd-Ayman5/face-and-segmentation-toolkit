@@ -7,28 +7,26 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1200</width>
-    <height>750</height>
+    <width>1300</width>
+    <height>820</height>
    </rect>
   </property>
 
   <property name="windowTitle">
-   <string>Face Detection App</string>
+   <string>Vision Toolkit</string>
   </property>
 
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout">
+    <property name="margin"><number>0</number></property>
+    <property name="spacing"><number>0</number></property>
 
     <item>
      <widget class="QTabWidget" name="tabWidget">
 
-      <!-- ================= TAB STYLE (BLACK TOP BAR) ================= -->
       <property name="styleSheet">
        <string>
-QTabWidget::pane {
-    border: 0;
-}
-
+QTabWidget::pane { border: 0; }
 QTabBar::tab {
     background: #000000;
     color: white;
@@ -36,94 +34,209 @@ QTabBar::tab {
     border: 1px solid #222;
     font-size: 12pt;
 }
-
 QTabBar::tab:selected {
     background: #1e1e1e;
     border-bottom: 2px solid #ffffff;
 }
-
-QTabBar::tab:hover {
-    background: #2a2a2a;
-}
+QTabBar::tab:hover { background: #2a2a2a; }
        </string>
       </property>
 
-      <!-- ═════════════════ FACE DETECTION TAB ═════════════════ -->
+      <!-- ═══════════════ FACE DETECTION TAB ═══════════════ -->
       <widget class="QWidget" name="faceDetectionTab">
-       <attribute name="title">
-        <string>Face Detection</string>
-       </attribute>
+       <attribute name="title"><string>Face Detection</string></attribute>
 
        <layout class="QHBoxLayout">
-
-        <!-- LEFT PANEL -->
         <item>
          <widget class="QWidget" name="faceLeftPanel">
-          <property name="maximumWidth">
-           <number>350</number>
-          </property>
-
+          <property name="maximumWidth"><number>350</number></property>
           <layout class="QVBoxLayout">
-
-           <!-- Image Name -->
            <item>
             <widget class="QLabel" name="faceImageNameLbl">
-             <property name="text">
-              <string>No image loaded</string>
-             </property>
+             <property name="text"><string>No image loaded</string></property>
             </widget>
            </item>
+           <item>
+            <widget class="QPushButton" name="faceBtnLoad">
+             <property name="text"><string>📂 Load Image</string></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="faceBtnRun">
+             <property name="text"><string>▶ Run Detection</string></property>
+             <property name="enabled"><bool>false</bool></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="faceStatsLbl">
+             <property name="text"><string>—</string></property>
+             <property name="wordWrap"><bool>true</bool></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="faceBtnSave">
+             <property name="text"><string>💾 Save Result</string></property>
+             <property name="enabled"><bool>false</bool></property>
+            </widget>
+           </item>
+           <item>
+            <spacer>
+             <property name="orientation"><enum>Qt::Vertical</enum></property>
+            </spacer>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="faceCanvasLabel">
+          <property name="text"><string>Load an image to begin</string></property>
+          <property name="alignment"><set>Qt::AlignCenter</set></property>
+          <property name="minimumSize">
+           <size><width>500</width><height>400</height></size>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+
+
+      <!-- ═══════════════ THRESHOLDING TAB ═══════════════ -->
+      <widget class="QWidget" name="thresholdingTab">
+       <attribute name="title"><string>Thresholding</string></attribute>
+
+       <layout class="QHBoxLayout">
+        <property name="spacing"><number>12</number></property>
+        <property name="margin"><number>12</number></property>
+
+        <!-- LEFT CONTROLS -->
+        <item>
+         <widget class="QWidget" name="threshControlsPanel">
+          <property name="maximumWidth"><number>300</number></property>
+          <property name="minimumWidth"><number>260</number></property>
+
+          <layout class="QVBoxLayout">
+           <property name="spacing"><number>10</number></property>
 
            <!-- Load Button -->
            <item>
-            <widget class="QPushButton" name="faceBtnLoad">
-             <property name="text">
-              <string>📂 Load Image</string>
-             </property>
+            <widget class="QPushButton" name="threshBtnLoad">
+             <property name="text"><string>📂 Load Grayscale Image</string></property>
             </widget>
            </item>
 
-           <!-- Run Button -->
+           <!-- Image name label -->
            <item>
-            <widget class="QPushButton" name="faceBtnRun">
-             <property name="text">
-              <string>▶ Run Detection</string>
-             </property>
-             <property name="enabled">
-              <bool>false</bool>
-             </property>
+            <widget class="QLabel" name="threshImageNameLbl">
+             <property name="text"><string>No image loaded</string></property>
+             <property name="wordWrap"><bool>true</bool></property>
+             <property name="styleSheet"><string>color: #aaa; font-size: 10pt;</string></property>
             </widget>
            </item>
 
-           <!-- Stats -->
+           <!-- Separator -->
            <item>
-            <widget class="QLabel" name="faceStatsLbl">
-             <property name="text">
-              <string>—</string>
-             </property>
-             <property name="wordWrap">
-              <bool>true</bool>
-             </property>
+            <widget class="QFrame" name="threshSep1">
+             <property name="frameShape"><enum>QFrame::HLine</enum></property>
+             <property name="frameShadow"><enum>QFrame::Sunken</enum></property>
             </widget>
            </item>
 
-           <!-- Save -->
+           <!-- Method label -->
            <item>
-            <widget class="QPushButton" name="faceBtnSave">
-             <property name="text">
-              <string>💾 Save Result</string>
-             </property>
-             <property name="enabled">
-              <bool>false</bool>
-             </property>
+            <widget class="QLabel" name="threshMethodLbl">
+             <property name="text"><string>Thresholding Method:</string></property>
+             <property name="styleSheet"><string>font-weight: bold;</string></property>
+            </widget>
+           </item>
+
+           <!-- Method ComboBox -->
+           <item>
+            <widget class="QComboBox" name="threshMethodCombo">
+             <item><property name="text"><string>Spectral Thresholding</string></property></item>
+            </widget>
+           </item>
+
+           <!-- Separator -->
+           <item>
+            <widget class="QFrame" name="threshSep2">
+             <property name="frameShape"><enum>QFrame::HLine</enum></property>
+             <property name="frameShadow"><enum>QFrame::Sunken</enum></property>
+            </widget>
+           </item>
+
+           <!-- Spectral Params Group -->
+           <item>
+            <widget class="QGroupBox" name="spectralParamsGroup">
+             <property name="title"><string>Spectral Parameters</string></property>
+             <layout class="QVBoxLayout">
+              <property name="spacing"><number>8</number></property>
+
+              <item>
+               <layout class="QHBoxLayout">
+                <item>
+                 <widget class="QLabel" name="spectralModesLbl">
+                  <property name="text"><string>Modes (regions):</string></property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QSpinBox" name="spectralModesSpin">
+                  <property name="minimum"><number>3</number></property>
+                  <property name="maximum"><number>6</number></property>
+                  <property name="value"><number>3</number></property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+
+              <item>
+               <widget class="QLabel" name="spectralInfoLbl">
+                <property name="text"><string>3 modes → 2 thresholds
+4 modes → 3 thresholds, etc.</string></property>
+                <property name="wordWrap"><bool>true</bool></property>
+                <property name="styleSheet"><string>color: #aaa; font-size: 9pt;</string></property>
+               </widget>
+              </item>
+
+             </layout>
+            </widget>
+           </item>
+
+           <!-- Separator -->
+           <item>
+            <widget class="QFrame" name="threshSep3">
+             <property name="frameShape"><enum>QFrame::HLine</enum></property>
+             <property name="frameShadow"><enum>QFrame::Sunken</enum></property>
+            </widget>
+           </item>
+
+           <!-- Apply Button -->
+           <item>
+            <widget class="QPushButton" name="threshBtnApply">
+             <property name="text"><string>▶ Apply</string></property>
+             <property name="enabled"><bool>false</bool></property>
+            </widget>
+           </item>
+
+           <!-- Save Button -->
+           <item>
+            <widget class="QPushButton" name="threshBtnSave">
+             <property name="text"><string>💾 Save Result</string></property>
+             <property name="enabled"><bool>false</bool></property>
+            </widget>
+           </item>
+
+           <!-- Status label -->
+           <item>
+            <widget class="QLabel" name="threshStatusLbl">
+             <property name="text"><string></string></property>
+             <property name="wordWrap"><bool>true</bool></property>
+             <property name="styleSheet"><string>color: #88cc88; font-size: 10pt;</string></property>
             </widget>
            </item>
 
            <item>
             <spacer>
-             <property name="orientation">
-              <enum>Qt::Vertical</enum>
-             </property>
+             <property name="orientation"><enum>Qt::Vertical</enum></property>
             </spacer>
            </item>
 
@@ -131,22 +244,348 @@ QTabBar::tab:hover {
          </widget>
         </item>
 
-        <!-- RIGHT CANVAS -->
+        <!-- RIGHT: Input + Output images side by side -->
         <item>
-         <widget class="QLabel" name="faceCanvasLabel">
-          <property name="text">
-           <string>Load an image to begin</string>
-          </property>
-          <property name="alignment">
-           <set>Qt::AlignCenter</set>
-          </property>
-          <property name="minimumSize">
-           <size>
-            <width>500</width>
-            <height>400</height>
-           </size>
-          </property>
+         <layout class="QVBoxLayout">
+          <property name="spacing"><number>6</number></property>
+
+          <item>
+           <layout class="QHBoxLayout">
+            <property name="spacing"><number>8</number></property>
+
+            <!-- Input Image Frame -->
+            <item>
+             <widget class="QFrame" name="threshInputFrame">
+              <property name="frameShape"><enum>QFrame::StyledPanel</enum></property>
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+                <horstretch>1</horstretch><verstretch>1</verstretch>
+               </sizepolicy>
+              </property>
+              <layout class="QVBoxLayout">
+               <property name="margin"><number>4</number></property>
+               <property name="spacing"><number>4</number></property>
+               <item>
+                <widget class="QLabel" name="threshInputTitleLbl">
+                 <property name="text"><string>Input Image</string></property>
+                 <property name="alignment"><set>Qt::AlignCenter</set></property>
+                 <property name="maximumHeight"><number>24</number></property>
+                 <property name="styleSheet"><string>font-weight: bold; font-size: 11pt; color: #ccc;</string></property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="threshInputCanvas">
+                 <property name="text"><string>Load an image</string></property>
+                 <property name="alignment"><set>Qt::AlignCenter</set></property>
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+                   <horstretch>1</horstretch><verstretch>1</verstretch>
+                  </sizepolicy>
+                 </property>
+                 <property name="styleSheet"><string>background-color: #111; border: 1px solid #333; color: #555;</string></property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+            </item>
+
+            <!-- Output Image Frame -->
+            <item>
+             <widget class="QFrame" name="threshOutputFrame">
+              <property name="frameShape"><enum>QFrame::StyledPanel</enum></property>
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+                <horstretch>1</horstretch><verstretch>1</verstretch>
+               </sizepolicy>
+              </property>
+              <layout class="QVBoxLayout">
+               <property name="margin"><number>4</number></property>
+               <property name="spacing"><number>4</number></property>
+               <item>
+                <widget class="QLabel" name="threshOutputTitleLbl">
+                 <property name="text"><string>Output Image</string></property>
+                 <property name="alignment"><set>Qt::AlignCenter</set></property>
+                 <property name="maximumHeight"><number>24</number></property>
+                 <property name="styleSheet"><string>font-weight: bold; font-size: 11pt; color: #ccc;</string></property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="threshOutputCanvas">
+                 <property name="text"><string>Result will appear here</string></property>
+                 <property name="alignment"><set>Qt::AlignCenter</set></property>
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+                   <horstretch>1</horstretch><verstretch>1</verstretch>
+                  </sizepolicy>
+                 </property>
+                 <property name="styleSheet"><string>background-color: #111; border: 1px solid #333; color: #555;</string></property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+            </item>
+
+           </layout>
+          </item>
+
+          <!-- Histogram strip below -->
+          <item>
+           <widget class="QLabel" name="threshHistCanvas">
+            <property name="text"><string>Histogram with threshold lines will appear here after applying</string></property>
+            <property name="alignment"><set>Qt::AlignCenter</set></property>
+            <property name="minimumHeight"><number>110</number></property>
+            <property name="maximumHeight"><number>140</number></property>
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+              <horstretch>0</horstretch><verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="styleSheet"><string>background-color: #0a0a0a; border: 1px solid #333; color: #555; font-size: 10pt;</string></property>
+           </widget>
+          </item>
+
+         </layout>
+        </item>
+
+       </layout>
+      </widget>
+
+
+      <!-- ═══════════════ SEGMENTATION TAB ═══════════════ -->
+      <widget class="QWidget" name="segmentationTab">
+       <attribute name="title"><string>Segmentation</string></attribute>
+
+       <layout class="QHBoxLayout">
+        <property name="spacing"><number>12</number></property>
+        <property name="margin"><number>12</number></property>
+
+        <!-- LEFT CONTROLS -->
+        <item>
+         <widget class="QWidget" name="segControlsPanel">
+          <property name="maximumWidth"><number>300</number></property>
+          <property name="minimumWidth"><number>260</number></property>
+
+          <layout class="QVBoxLayout">
+           <property name="spacing"><number>10</number></property>
+
+           <!-- Load Button -->
+           <item>
+            <widget class="QPushButton" name="segBtnLoad">
+             <property name="text"><string>📂 Load Image</string></property>
+            </widget>
+           </item>
+
+           <!-- Image name label -->
+           <item>
+            <widget class="QLabel" name="segImageNameLbl">
+             <property name="text"><string>No image loaded</string></property>
+             <property name="wordWrap"><bool>true</bool></property>
+             <property name="styleSheet"><string>color: #aaa; font-size: 10pt;</string></property>
+            </widget>
+           </item>
+
+           <!-- Separator -->
+           <item>
+            <widget class="QFrame" name="segSep1">
+             <property name="frameShape"><enum>QFrame::HLine</enum></property>
+             <property name="frameShadow"><enum>QFrame::Sunken</enum></property>
+            </widget>
+           </item>
+
+           <!-- Method label -->
+           <item>
+            <widget class="QLabel" name="segMethodLbl">
+             <property name="text"><string>Segmentation Method:</string></property>
+             <property name="styleSheet"><string>font-weight: bold;</string></property>
+            </widget>
+           </item>
+
+           <!-- Method ComboBox -->
+           <item>
+            <widget name="segMethodCombo" class="QComboBox">
+             <item><property name="text"><string>Region Growing</string></property></item>
+            </widget>
+           </item>
+
+           <!-- Separator -->
+           <item>
+            <widget class="QFrame" name="segSep2">
+             <property name="frameShape"><enum>QFrame::HLine</enum></property>
+             <property name="frameShadow"><enum>QFrame::Sunken</enum></property>
+            </widget>
+           </item>
+
+           <!-- Region Growing Params Group -->
+           <item>
+            <widget class="QGroupBox" name="regionParamsGroup">
+             <property name="title"><string>Region Growing Parameters</string></property>
+             <layout class="QVBoxLayout">
+              <property name="spacing"><number>8</number></property>
+
+              <item>
+               <layout class="QHBoxLayout">
+                <item>
+                 <widget class="QLabel" name="regionThreshLbl">
+                  <property name="text"><string>Threshold:</string></property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QSpinBox" name="regionThreshSpin">
+                  <property name="minimum"><number>1</number></property>
+                  <property name="maximum"><number>100</number></property>
+                  <property name="value"><number>15</number></property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+
+              <item>
+               <widget class="QLabel" name="regionSeedsLbl">
+                <property name="text"><string>Seeds: click on image to add</string></property>
+                <property name="wordWrap"><bool>true</bool></property>
+                <property name="styleSheet"><string>color: #aaa; font-size: 9pt;</string></property>
+               </widget>
+              </item>
+
+              <item>
+               <widget class="QPushButton" name="segBtnClearSeeds">
+                <property name="text"><string>🗑 Clear Seeds</string></property>
+               </widget>
+              </item>
+
+              <!-- Seed list display -->
+              <item>
+               <widget class="QListWidget" name="segSeedsList">
+                <property name="minimumHeight"><number>80</number></property>
+                <property name="maximumHeight"><number>100</number></property>
+               </widget>
+              </item>
+
+             </layout>
+            </widget>
+           </item>
+
+           <!-- Separator -->
+           <item>
+            <widget class="QFrame" name="segSep3">
+             <property name="frameShape"><enum>QFrame::HLine</enum></property>
+             <property name="frameShadow"><enum>QFrame::Sunken</enum></property>
+            </widget>
+           </item>
+
+           <!-- Apply Button -->
+           <item>
+            <widget class="QPushButton" name="segBtnApply">
+             <property name="text"><string>▶ Apply</string></property>
+             <property name="enabled"><bool>false</bool></property>
+            </widget>
+           </item>
+
+           <!-- Save Button -->
+           <item>
+            <widget class="QPushButton" name="segBtnSave">
+             <property name="text"><string>💾 Save Result</string></property>
+             <property name="enabled"><bool>false</bool></property>
+            </widget>
+           </item>
+
+           <!-- Status label -->
+           <item>
+            <widget class="QLabel" name="segStatusLbl">
+             <property name="text"><string></string></property>
+             <property name="wordWrap"><bool>true</bool></property>
+             <property name="styleSheet"><string>color: #88cc88; font-size: 10pt;</string></property>
+            </widget>
+           </item>
+
+           <item>
+            <spacer>
+             <property name="orientation"><enum>Qt::Vertical</enum></property>
+            </spacer>
+           </item>
+
+          </layout>
          </widget>
+        </item>
+
+        <!-- RIGHT: Input + Output images side by side -->
+        <item>
+         <layout class="QHBoxLayout">
+          <property name="spacing"><number>8</number></property>
+
+          <!-- Input Image Frame (clickable for seeds) -->
+          <item>
+           <widget class="QFrame" name="segInputFrame">
+            <property name="frameShape"><enum>QFrame::StyledPanel</enum></property>
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+              <horstretch>1</horstretch><verstretch>1</verstretch>
+             </sizepolicy>
+            </property>
+            <layout class="QVBoxLayout">
+             <property name="margin"><number>4</number></property>
+             <property name="spacing"><number>4</number></property>
+             <item>
+              <widget class="QLabel" name="segInputTitleLbl">
+               <property name="text"><string>Input Image  (click to place seeds)</string></property>
+               <property name="alignment"><set>Qt::AlignCenter</set></property>
+               <property name="maximumHeight"><number>24</number></property>
+               <property name="styleSheet"><string>font-weight: bold; font-size: 11pt; color: #ccc;</string></property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLabel" name="segInputCanvas">
+               <property name="text"><string>Load an image</string></property>
+               <property name="alignment"><set>Qt::AlignCenter</set></property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+                 <horstretch>1</horstretch><verstretch>1</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="styleSheet"><string>background-color: #111; border: 1px solid #333; color: #555;</string></property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+
+          <!-- Output Image Frame -->
+          <item>
+           <widget class="QFrame" name="segOutputFrame">
+            <property name="frameShape"><enum>QFrame::StyledPanel</enum></property>
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+              <horstretch>1</horstretch><verstretch>1</verstretch>
+             </sizepolicy>
+            </property>
+            <layout class="QVBoxLayout">
+             <property name="margin"><number>4</number></property>
+             <property name="spacing"><number>4</number></property>
+             <item>
+              <widget class="QLabel" name="segOutputTitleLbl">
+               <property name="text"><string>Output Image</string></property>
+               <property name="alignment"><set>Qt::AlignCenter</set></property>
+               <property name="maximumHeight"><number>24</number></property>
+               <property name="styleSheet"><string>font-weight: bold; font-size: 11pt; color: #ccc;</string></property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLabel" name="segOutputCanvas">
+               <property name="text"><string>Result will appear here</string></property>
+               <property name="alignment"><set>Qt::AlignCenter</set></property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+                 <horstretch>1</horstretch><verstretch>1</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="styleSheet"><string>background-color: #111; border: 1px solid #333; color: #555;</string></property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+
+         </layout>
         </item>
 
        </layout>
@@ -154,7 +593,6 @@ QTabBar::tab:hover {
 
      </widget>
     </item>
-
    </layout>
   </widget>
 
@@ -164,12 +602,10 @@ QTabBar::tab:hover {
     <property name="title"><string>&amp;File</string></property>
     <addaction name="actionQuit"/>
    </widget>
-
    <widget class="QMenu" name="menuHelp">
     <property name="title"><string>&amp;Help</string></property>
     <addaction name="actionAbout"/>
    </widget>
-
    <addaction name="menuFile"/>
    <addaction name="menuHelp"/>
   </widget>
@@ -179,13 +615,11 @@ QTabBar::tab:hover {
   <action name="actionQuit">
    <property name="text"><string>Quit</string></property>
   </action>
-
   <action name="actionAbout">
    <property name="text"><string>About</string></property>
   </action>
 
  </widget>
-
  <resources/>
  <connections/>
 </ui>
