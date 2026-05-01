@@ -7,7 +7,7 @@ Responsibilities
 ----------------
 - Load a grayscale image via a file dialog.
 - Let the user pick a thresholding method from the combo-box
-  (currently: Spectral Thresholding).
+  (Optimal Thresholding, Spectral Thresholding, Otsu Thresholding).
 - Run the algorithm off the GUI thread (QThread + subprocess via
   multiprocessing.Queue – same pattern as the rest of the project).
 - Display input image, output image, and a histogram with threshold
@@ -22,13 +22,14 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-from PyQt5.QtCore import QObject, QThread, pyqtSignal
+from PyQt5.QtCore import QObject, QThread, Qt, pyqtSignal
 from PyQt5.QtGui import QImage, QPixmap, QPainter, QPen, QColor, QFont
 from PyQt5.QtWidgets import QFileDialog, QMainWindow
 
-# Algorithms live in core/Thresholding/
+# Algorithms
 from core.Thresholding.spectral_thresholding import spectral_threshold
 from core.Thresholding.otsu import otsu_threshold
+from core.thresholding.optimal import apply_optimal_threshold
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -37,31 +38,29 @@ from core.Thresholding.otsu import otsu_threshold
 
 def _worker_fn(gray: np.ndarray, method: str, n_modes: int, queue: mp.Queue):
     try:
-        method = method.lower()
+        method_l = method.lower()
 
-        if "otsu" in method:
+        if "otsu" in method_l:
             threshold_value, result = otsu_threshold(gray)
-            thresholds = [threshold_value]
+            queue.put(("otsu", {"result": result, "thresholds": [threshold_value]}))
 
-        elif "optimal" in method:
-            # add your optimal implementation here later
-            threshold_value, result = otsu_threshold(gray)   # temporary
-            thresholds = [threshold_value]
+        elif "optimal" in method_l:
+            result_dict = apply_optimal_threshold(gray)
+            queue.put(("optimal", result_dict))
 
-        elif "spectral" in method:
+        elif "spectral" in method_l:
             result, thresholds = spectral_threshold(gray, n_modes=n_modes)
+            queue.put(("spectral", {"result": result, "thresholds": thresholds}))
 
         else:
             raise ValueError(f"Unknown method: {method}")
 
-        queue.put((result, thresholds))
-
     except Exception as exc:
-        queue.put((None, str(exc)))
+        queue.put(("error", str(exc)))
 
 
 class _ThresholdWorker(QThread):
-    finished = pyqtSignal(object, object)   # (np.ndarray | None, list | str)
+    finished = pyqtSignal(str, object)   # (kind, payload)
 
     def __init__(self, gray: np.ndarray, method: str, n_modes: int):
         super().__init__()
@@ -76,8 +75,8 @@ class _ThresholdWorker(QThread):
         p.start()
         while True:
             if not q.empty():
-                result, extra = q.get()
-                self.finished.emit(result, extra)
+                kind, payload = q.get()
+                self.finished.emit(kind, payload)
                 break
             self.msleep(40)
         p.join()
@@ -147,6 +146,7 @@ class ThresholdingController(QObject):
             "Histogram with threshold lines will appear here after applying"
         )
         self._window.threshHistCanvas.setPixmap(QPixmap())
+        self._window.threshResultInfoLbl.setText("")
 
         name = Path(path).name
         self._window.threshImageNameLbl.setText(name)
@@ -172,30 +172,68 @@ class ThresholdingController(QObject):
         self._worker.start()
 
     # ------------------------------------------------------------------
-    def _on_result(self, result, extra):
+    def _on_result(self, kind: str, payload):
         self._window.threshBtnApply.setEnabled(True)
         self._window.threshBtnLoad.setEnabled(True)
 
-        if result is None:
-            self._set_status(f"❌ Error: {extra}", error=True)
+        if kind == "error":
+            self._set_status(f"❌ Error: {payload}", error=True)
             return
 
-        thresholds: list[int] = extra
-        self._result     = result
-        self._thresholds = thresholds
+        if kind == "otsu":
+            result     = payload["result"]
+            thresholds = payload["thresholds"]
 
-        # Show segmented image
-        self._show_on_canvas(result, self._window.threshOutputCanvas, gray=True)
+            self._result     = result
+            self._thresholds = thresholds
+            self._show_on_canvas(result, self._window.threshOutputCanvas, gray=True)
+            self._draw_histogram(self._gray_image, thresholds,
+                                 self._window.threshHistCanvas)
+            self._window.threshResultInfoLbl.setText(
+                f"Threshold: {thresholds[0]}"
+            )
+            self._set_status(f"✅ Otsu done — T={thresholds[0]}")
 
-        # Draw histogram
-        self._draw_histogram(self._gray_image, thresholds,
-                             self._window.threshHistCanvas)
+        elif kind == "optimal":
+            binary     = payload["binary"]
+            threshold  = payload["threshold"]
+            iterations = payload["iterations"]
+            history    = payload["history"]
+
+            self._result     = binary
+            self._thresholds = [threshold]
+            self._show_on_canvas(binary, self._window.threshOutputCanvas, gray=True)
+            self._draw_histogram(self._gray_image, [threshold],
+                                 self._window.threshHistCanvas)
+            self._window.threshResultInfoLbl.setText(
+                f"Threshold: {threshold}  |  "
+                f"Iterations: {iterations}  |  "
+                "History: " + " → ".join(f"{v:.1f}" for v in history)
+            )
+            self._set_status(
+                f"✅ Optimal done — T={threshold}, "
+                f"converged in {iterations} iteration(s)"
+            )
+
+        elif kind == "spectral":
+            result     = payload["result"]
+            thresholds = payload["thresholds"]
+
+            self._result     = result
+            self._thresholds = thresholds
+            self._show_on_canvas(result, self._window.threshOutputCanvas, gray=True)
+            self._draw_histogram(self._gray_image, thresholds,
+                                 self._window.threshHistCanvas)
+            n_regions = len(thresholds) + 1
+            self._window.threshResultInfoLbl.setText(
+                f"{n_regions} regions  |  Thresholds: {thresholds}"
+            )
+            self._set_status(
+                f"✅ Spectral done — {n_regions} regions, "
+                f"thresholds: {thresholds}"
+            )
 
         self._window.threshBtnSave.setEnabled(True)
-        n_modes = len(thresholds) + 1
-        self._set_status(
-            f"✅ Done — {n_modes} regions, thresholds: {thresholds}"
-        )
 
     # ------------------------------------------------------------------
     def _save(self):
@@ -241,8 +279,8 @@ class ThresholdingController(QObject):
 
         pix = QPixmap.fromImage(qimg).scaled(
             lw, lh,
-            aspectRatioMode=1,          # Qt.KeepAspectRatio
-            transformMode=1             # Qt.SmoothTransformation
+            aspectRatioMode=Qt.KeepAspectRatio,
+            transformMode=Qt.SmoothTransformation
         )
         label.setPixmap(pix)
 
@@ -269,9 +307,6 @@ class ThresholdingController(QObject):
         # ── Draw histogram bars ──────────────────────────────────────
         bar_w = max(1, W // 256)
         bar_colour = QColor("#4488cc")
-        painter.setPen(Qt.NoPen if hasattr(painter, 'NoPen') else QPen(bar_colour, 0))
-
-        from PyQt5.QtCore import Qt
         painter.setPen(Qt.NoPen)
         painter.setBrush(bar_colour)
 

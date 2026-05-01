@@ -7,7 +7,7 @@ Responsibilities
 ----------------
 - Load a colour or grayscale image via a file dialog.
 - Let the user click on the input canvas to place seed points.
-- Run Region Growing off the GUI thread (same QThread + mp.Process
+- Run segmentation off the GUI thread (same QThread + mp.Process
   pattern used throughout the project).
 - Display input (with seed markers drawn on it) and output images.
 - Save the result to disk.
@@ -21,9 +21,10 @@ from pathlib import Path
 import cv2
 import numpy as np
 from PyQt5.QtCore import QObject, QThread, Qt, pyqtSignal, QPoint
-from PyQt5.QtGui import QImage, QPixmap, QPainter, QPen, QBrush, QColor
+from PyQt5.QtGui import QBrush, QColor, QFont, QImage, QPainter, QPen, QPixmap
 from PyQt5.QtWidgets import QFileDialog, QMainWindow, QListWidgetItem
 
+from core.segmentation.kmeans import apply_kmeans_segmentation
 from core.segmentation.region_growing import region_growing
 from core.segmentation.mean_shift import mean_shift_segmentation
 
@@ -46,6 +47,7 @@ def _worker_fn(image: np.ndarray,
 
         if "region" in method:
             result = region_growing(image, seeds, threshold)
+            queue.put(("result", result, None))
         elif "mean" in method and "shift" in method:
             original_h, original_w = image.shape[:2]
             small = cv2.resize(image, (100, 100), interpolation=cv2.INTER_AREA)
@@ -62,12 +64,15 @@ def _worker_fn(image: np.ndarray,
                 (original_w, original_h),
                 interpolation=cv2.INTER_NEAREST,
             )
+            queue.put(("result", result, None))
         elif "k" in method and "means" in method:
-            raise NotImplementedError("K-Means is not implemented yet in this controller")
+            seg_result = apply_kmeans_segmentation(
+                image, k=km_clusters, random_state=42
+            )
+            queue.put(("kmeans", seg_result, None))
         else:
             raise ValueError(f"Unknown segmentation method: {method}")
 
-        queue.put(("result", result, None))
     except Exception as exc:
         queue.put(("error", None, str(exc)))
 
@@ -253,6 +258,8 @@ class SegmentationController(QObject):
         self._refresh_input_canvas()
         self._window.segOutputCanvas.setText("Result will appear here")
         self._window.segOutputCanvas.setPixmap(QPixmap())
+        self._window.segLegendCanvas.setText("")
+        self._window.segLegendCanvas.setPixmap(QPixmap())
 
         name = Path(path).name
         self._window.segImageNameLbl.setText(name)
@@ -333,10 +340,37 @@ class SegmentationController(QObject):
         error_msg = None
         if isinstance(result, tuple) and len(result) == 3:
             kind, payload, error_msg = result
+
             if kind == "error":
-                result = None
-            else:
-                result = payload
+                self._set_status(
+                    f"❌ Segmentation failed: {error_msg}", error=True
+                )
+                return
+
+            if kind == "kmeans":
+                self._result = payload["segmented"]
+                _show_bgr_on_canvas(self._result, self._window.segOutputCanvas)
+                _draw_kmeans_legend(
+                    payload["centroids"],
+                    payload["labels"],
+                    self._window.segLegendCanvas,
+                    is_color=self._image.ndim == 3,
+                )
+                self._window.kmInfoLbl.setText(
+                    f"k={payload['k']}  |  "
+                    f"Iterations: {payload['iterations']}  |  "
+                    f"Inertia: {payload['inertia']:.1f}"
+                )
+                self._window.segBtnSave.setEnabled(True)
+                self._set_status(
+                    f"✅ K-Means done — {payload['k']} clusters, "
+                    f"{payload['iterations']} iter(s), "
+                    f"inertia={payload['inertia']:.1f}"
+                )
+                return
+
+            # generic result (region growing, mean shift)
+            result = payload
 
         if result is None:
             if error_msg:
@@ -347,6 +381,8 @@ class SegmentationController(QObject):
 
         self._result = result
         _show_bgr_on_canvas(result, self._window.segOutputCanvas)
+        self._window.segLegendCanvas.setText("")
+        self._window.segLegendCanvas.setPixmap(QPixmap())
         self._window.segBtnSave.setEnabled(True)
         method = self._window.segMethodCombo.currentText()
         if "region" in method.lower():
@@ -441,4 +477,45 @@ def _show_bgr_on_canvas(img: np.ndarray, label) -> None:
         aspectRatioMode=Qt.KeepAspectRatio,
         transformMode=Qt.SmoothTransformation
     )
+    label.setPixmap(pix)
+
+
+def _draw_kmeans_legend(
+    centroids: np.ndarray,
+    labels: np.ndarray,
+    label,
+    is_color: bool = True,
+) -> None:
+    k   = len(centroids)
+    W   = max(label.width(), 300)
+    H   = max(label.height(), max(k * 36 + 16, 50))
+
+    pix = QPixmap(W, H)
+    pix.fill(QColor("#0a0a0a"))
+    painter = QPainter(pix)
+    painter.setFont(QFont("Arial", 9))
+
+    total   = labels.size
+    sw, sh  = 28, 22
+    margin  = 8
+    row_h   = sh + 10
+
+    for idx, centroid in enumerate(centroids):
+        y = margin + idx * row_h
+        if is_color and centroid.shape[0] >= 3:
+            b, g, r = int(centroid[0]), int(centroid[1]), int(centroid[2])
+        else:
+            r = g = b = int(centroid[0])
+
+        painter.setBrush(QBrush(QColor(r, g, b)))
+        painter.setPen(QPen(QColor("#888888"), 1))
+        painter.drawRect(margin, y, sw, sh)
+
+        pct = 100.0 * np.sum(labels == idx) / total
+        val = f"RGB({r},{g},{b})" if is_color else f"Gray({r})"
+        painter.setPen(QPen(QColor("#dddddd"), 1))
+        painter.drawText(margin + sw + 8, y + sh - 5,
+                         f"Cluster {idx + 1}  {val}  {pct:.1f}%")
+
+    painter.end()
     label.setPixmap(pix)
