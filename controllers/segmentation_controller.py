@@ -1,18 +1,16 @@
 """
-controllers/segmentation_tab_controller.py
--------------------------------------------
-Unified controller for the Segmentation tab.
+controllers/segmentation_controller.py
+----------------------------------------
+Controls the Segmentation tab in main.ui.
 
-Manages the combo-box switch between:
-  • K-Means        (index 0) — Lolo's algorithm
-  • Region Growing (index 1) — Roro's algorithm
-
-All shared widgets (Load, Apply, Save, canvases, status, legend strip)
-live once in the .ui; this controller owns them and routes work to the
-correct algorithm based on the current combo selection.
-
-The seed-click logic (for Region Growing) is also handled here so
-it can be activated/deactivated cleanly when switching methods.
+Responsibilities
+----------------
+- Load a colour or grayscale image via a file dialog.
+- Let the user click on the input canvas to place seed points.
+- Run segmentation off the GUI thread (same QThread + mp.Process
+  pattern used throughout the project).
+- Display input (with seed markers drawn on it) and output images.
+- Save the result to disk.
 """
 
 from __future__ import annotations
@@ -22,165 +20,216 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-from PyQt5.QtCore import QObject, QThread, Qt, pyqtSignal
+from PyQt5.QtCore import QObject, QThread, Qt, pyqtSignal, QPoint
 from PyQt5.QtGui import QBrush, QColor, QFont, QImage, QPainter, QPen, QPixmap
-from PyQt5.QtWidgets import QFileDialog, QListWidgetItem, QMainWindow
+from PyQt5.QtWidgets import QFileDialog, QMainWindow, QListWidgetItem
 
-# ── algorithms ────────────────────────────────────────────────────────────────
 from core.segmentation.kmeans import apply_kmeans_segmentation
 from core.segmentation.region_growing import region_growing
-
-METHOD_KMEANS  = 0
-METHOD_REGION  = 1
+from core.segmentation.mean_shift import mean_shift_segmentation
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Workers
+# Worker
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _kmeans_worker_fn(image: np.ndarray, k: int, queue: mp.Queue) -> None:
+def _worker_fn(image: np.ndarray,
+               method: str,
+               seeds: list[tuple[int, int]],
+               threshold: int,
+               km_clusters: int,
+               ms_spatial_radius: int,
+               ms_color_radius: int,
+               ms_max_iter: int,
+               queue: mp.Queue) -> None:
     try:
-        queue.put(("kmeans", apply_kmeans_segmentation(image, k=k, random_state=42)))
-    except Exception as exc:
-        queue.put(("error", str(exc)))
+        method = method.lower()
 
+        if "region" in method:
+            result = region_growing(image, seeds, threshold)
+            queue.put(("result", result, None))
+        elif "mean" in method and "shift" in method:
+            original_h, original_w = image.shape[:2]
+            small = cv2.resize(image, (100, 100), interpolation=cv2.INTER_AREA)
 
-def _region_worker_fn(image: np.ndarray,
-                      seeds: list[tuple[int, int]],
-                      threshold: int,
-                      queue: mp.Queue) -> None:
-    try:
-        result = region_growing(image, seeds, threshold)
-        queue.put(("region", result))
+            result_small = mean_shift_segmentation(
+                small,
+                spatial_radius=ms_spatial_radius,
+                color_radius=ms_color_radius,
+                max_iter=ms_max_iter,
+                progress_queue=queue,
+            )
+            result = cv2.resize(
+                result_small,
+                (original_w, original_h),
+                interpolation=cv2.INTER_NEAREST,
+            )
+            queue.put(("result", result, None))
+        elif "k" in method and "means" in method:
+            seg_result = apply_kmeans_segmentation(
+                image, k=km_clusters, random_state=42
+            )
+            queue.put(("kmeans", seg_result, None))
+        else:
+            raise ValueError(f"Unknown segmentation method: {method}")
+
     except Exception as exc:
-        queue.put(("error", str(exc)))
+        queue.put(("error", None, str(exc)))
 
 
 class _SegWorker(QThread):
-    finished = pyqtSignal(str, object)   # (kind, payload)
+    finished = pyqtSignal(object)
+    progress = pyqtSignal(str)
 
-    def __init__(self, target_fn, args: tuple):
+    def __init__(self,
+                 image,
+                 method,
+                 seeds,
+                 threshold,
+                 km_clusters,
+                 ms_spatial_radius,
+                 ms_color_radius,
+                 ms_max_iter):
         super().__init__()
-        self._target = target_fn
-        self._args   = args
+        self._image             = image
+        self._method            = method
+        self._seeds             = seeds
+        self._threshold         = threshold
+        self._km_clusters       = km_clusters
+        self._ms_spatial_radius = ms_spatial_radius
+        self._ms_color_radius   = ms_color_radius
+        self._ms_max_iter       = ms_max_iter
 
     def run(self):
         q = mp.Queue()
-        p = mp.Process(target=self._target, args=(*self._args, q))
+        p = mp.Process(target=_worker_fn,
+                       args=(
+                           self._image,
+                           self._method,
+                           self._seeds,
+                           self._threshold,
+                           self._km_clusters,
+                           self._ms_spatial_radius,
+                           self._ms_color_radius,
+                           self._ms_max_iter,
+                           q,
+                       ))
         p.start()
         while True:
             if not q.empty():
-                kind, payload = q.get()
-                self.finished.emit(kind, payload)
+                message = q.get()
+                if isinstance(message, tuple) and message and message[0] == "progress":
+                    self.progress.emit(f"⏳ Mean Shift processing... {message[1]}%")
+                    continue
+                self.finished.emit(message)
                 break
             self.msleep(40)
         p.join()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Clickable canvas helper (Region Growing seeds)
+# Clickable canvas helper
 # ─────────────────────────────────────────────────────────────────────────────
 
-class _ClickableCanvas:
-    """Monkey-patches a QLabel to report image-space clicks."""
-
+class _ClickableLabel:
+    """
+    Monkey-patches a QLabel to emit (x, y) in *image* coordinates on click.
+    We do it without subclassing so we don't need a custom widget in the .ui.
+    """
     def __init__(self, label, callback):
         self._label    = label
         self._callback = callback
         self._img_w    = 1
         self._img_h    = 1
-        self._active   = False
         label.mousePressEvent = self._on_click
 
     def set_image_size(self, w: int, h: int):
-        self._img_w, self._img_h = w, h
-
-    def set_active(self, active: bool):
-        self._active = active
+        self._img_w = w
+        self._img_h = h
 
     def _on_click(self, event):
-        if not self._active:
-            return
-        lw, lh = self._label.width(), self._label.height()
+        lw = self._label.width()
+        lh = self._label.height()
         if lw == 0 or lh == 0:
             return
-        scale  = min(lw / self._img_w, lh / self._img_h)
+
+        # The pixmap is scaled keeping aspect ratio and centred
+        scale = min(lw / self._img_w, lh / self._img_h)
         disp_w = int(self._img_w * scale)
         disp_h = int(self._img_h * scale)
         off_x  = (lw - disp_w) // 2
         off_y  = (lh - disp_h) // 2
+
         px = event.x() - off_x
         py = event.y() - off_y
         if 0 <= px < disp_w and 0 <= py < disp_h:
-            self._callback(int(px / scale), int(py / scale))
+            img_x = int(px / scale)
+            img_y = int(py / scale)
+            self._callback(img_x, img_y)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Unified Controller
+# Controller
 # ─────────────────────────────────────────────────────────────────────────────
 
-class SegmentationTabController(QObject):
+class SegmentationController(QObject):
     status_message = pyqtSignal(str)
 
     def __init__(self, window: QMainWindow):
         super().__init__(window)
-        self._window     = window
-        self._image      : np.ndarray | None = None
-        self._result_img : np.ndarray | None = None
-        self._seeds      : list[tuple[int, int]] = []
-        self._worker     : _SegWorker | None = None
+        self._window : QMainWindow      = window
+        self._image  : np.ndarray | None = None
+        self._result : np.ndarray | None = None
+        self._seeds  : list[tuple[int, int]] = []
+        self._worker : _SegWorker | None = None
 
-        self._canvas = _ClickableCanvas(
+        # Wrap input canvas for click events
+        self._canvas = _ClickableLabel(
             window.segInputCanvas, self._on_canvas_click
         )
 
-    # ------------------------------------------------------------------ bind
+    # ------------------------------------------------------------------
     def bind_ui(self):
         w = self._window
         w.segBtnLoad.clicked.connect(self._load_image)
         w.segBtnApply.clicked.connect(self._apply)
         w.segBtnSave.clicked.connect(self._save)
         w.segBtnClearSeeds.clicked.connect(self._clear_seeds)
-        w.segMethodCombo.currentIndexChanged.connect(self._on_method_changed)
+        w.segMethodCombo.currentTextChanged.connect(self._on_method_changed)
+        self._on_method_changed(w.segMethodCombo.currentText())
 
-        # Show correct params group on startup
-        self._on_method_changed(w.segMethodCombo.currentIndex())
+    # ------------------------------------------------------------------
+    def _on_method_changed(self, method: str):
+        method = method.lower()
 
-    # --------------------------------------------------------- method switch
-    def _on_method_changed(self, index: int):
-        w = self._window
-        is_kmeans = (index == METHOD_KMEANS)
-        is_region = (index == METHOD_REGION)
-
-        w.kmeansParamsGroup.setVisible(is_kmeans)
-        w.regionParamsGroup.setVisible(is_region)
-
-        # Seed clicks only active for Region Growing
-        self._canvas.set_active(is_region)
-
-        # Update input canvas title hint
-        if is_region:
-            w.segInputTitleLbl.setText("Input Image  (click to place seeds)")
+        self._window.kmeansParamsGroup.setVisible("k-means" in method)
+        self._window.regionParamsGroup.setVisible("region" in method)
+        self._window.meanShiftParamsGroup.setVisible(
+            "mean" in method and "shift" in method
+        )
+        if "region" in method:
+            self._window.segInputTitleLbl.setText(
+                "Input Image  (click to place seeds)"
+            )
         else:
-            w.segInputTitleLbl.setText("Input Image")
+            self._window.segInputTitleLbl.setText("Input Image")
 
-        # Reset stale outputs
-        self._result_img = None
-        self._seeds      = []
-        w.segSeedsList.clear()
-        w.segOutputCanvas.setText("Result will appear here")
-        w.segOutputCanvas.setPixmap(QPixmap())
-        w.segLegendCanvas.setText("")
-        w.segLegendCanvas.setPixmap(QPixmap())
-        w.segBtnSave.setEnabled(False)
+        self._window.segBtnClearSeeds.setEnabled("region" in method)
+        self._update_apply_state()
 
-        # Re-draw input without seed markers
-        if self._image is not None:
-            _show_bgr(self._image, w.segInputCanvas)
-            # K-Means only needs an image to be ready; Region Growing needs seeds too
-            w.segBtnApply.setEnabled(is_kmeans)
+    # ------------------------------------------------------------------
+    def _update_apply_state(self):
+        if self._image is None:
+            self._window.segBtnApply.setEnabled(False)
+            return
 
-    # ------------------------------------------------------------------ load
+        method = self._window.segMethodCombo.currentText().lower()
+        if "region" in method:
+            self._window.segBtnApply.setEnabled(len(self._seeds) > 0)
+        else:
+            self._window.segBtnApply.setEnabled(True)
+
+    # ------------------------------------------------------------------
     def _load_image(self):
         path, _ = QFileDialog.getOpenFileName(
             self._window, "Open Image", "",
@@ -194,18 +243,19 @@ class SegmentationTabController(QObject):
             self._set_status("❌ Could not read image.", error=True)
             return
 
+        # Ensure at least 3 channels
         if img.ndim == 2:
             img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
 
-        self._image      = img
-        self._result_img = None
-        self._seeds      = []
+        self._image  = img
+        self._result = None
+        self._seeds  = []
         self._window.segSeedsList.clear()
 
         h, w = img.shape[:2]
         self._canvas.set_image_size(w, h)
 
-        _show_bgr(img, self._window.segInputCanvas)
+        self._refresh_input_canvas()
         self._window.segOutputCanvas.setText("Result will appear here")
         self._window.segOutputCanvas.setPixmap(QPixmap())
         self._window.segLegendCanvas.setText("")
@@ -213,173 +263,219 @@ class SegmentationTabController(QObject):
 
         name = Path(path).name
         self._window.segImageNameLbl.setText(name)
+        self._update_apply_state()
         self._window.segBtnSave.setEnabled(False)
+        self._set_status(f"Loaded: {name}")
 
-        method = self._window.segMethodCombo.currentIndex()
-        # K-Means is ready as soon as image is loaded; Region Growing needs seeds
-        self._window.segBtnApply.setEnabled(method == METHOD_KMEANS)
-
-        self._set_status(
-            f"Loaded: {name}"
-            + ("  |  Click image to add seed points."
-               if method == METHOD_REGION else "")
-        )
-
-    # ---------------------------------------------------- seed click (region)
+    # ------------------------------------------------------------------
     def _on_canvas_click(self, x: int, y: int):
         if self._image is None:
             return
+        method = self._window.segMethodCombo.currentText().lower()
+        if "region" not in method:
+            self._set_status("Seeds are only used with Region Growing.")
+            return
         self._seeds.append((x, y))
 
+        # Update list widget
         item = QListWidgetItem(f"Seed {len(self._seeds)}: ({x}, {y})")
         self._window.segSeedsList.addItem(item)
 
-        self._refresh_input_with_seeds()
-        self._window.segBtnApply.setEnabled(True)
-        self._set_status(f"{len(self._seeds)} seed(s) placed — ready to apply.")
+        self._refresh_input_canvas()
+        self._update_apply_state()
+        self._set_status(
+            f"{len(self._seeds)} seed(s) placed — ready to apply."
+        )
 
+    # ------------------------------------------------------------------
     def _clear_seeds(self):
         self._seeds = []
         self._window.segSeedsList.clear()
-        self._window.segBtnApply.setEnabled(False)
-        if self._image is not None:
-            _show_bgr(self._image, self._window.segInputCanvas)
+        self._update_apply_state()
+        self._refresh_input_canvas()
         self._set_status("Seeds cleared.")
 
-    def _refresh_input_with_seeds(self):
+    # ------------------------------------------------------------------
+    def _apply(self):
+        if self._image is None:
+            return
+
+        method = self._window.segMethodCombo.currentText()
+        method_l = method.lower()
+
+        if "region" in method_l and not self._seeds:
+            self._set_status("Please add at least one seed for Region Growing.",
+                             error=True)
+            return
+
+        threshold = self._window.regionThreshSpin.value()
+        km_clusters = self._window.kmClustersSpin.value()
+        ms_spatial_radius = self._window.msSpatialSpin.value()
+        ms_color_radius = self._window.msColorSpin.value()
+        ms_max_iter = self._window.msIterSpin.value()
+
+        self._window.segBtnApply.setEnabled(False)
+        self._window.segBtnLoad.setEnabled(False)
+        self._set_status(f"⏳ Processing {method}…")
+
+        self._worker = _SegWorker(
+            self._image,
+            method,
+            self._seeds,
+            threshold,
+            km_clusters,
+            ms_spatial_radius,
+            ms_color_radius,
+            ms_max_iter,
+        )
+        self._worker.progress.connect(self._set_status)
+        self._worker.finished.connect(self._on_result)
+        self._worker.start()
+
+    # ------------------------------------------------------------------
+    def _on_result(self, result):
+        self._window.segBtnLoad.setEnabled(True)
+        self._update_apply_state()
+
+        error_msg = None
+        if isinstance(result, tuple) and len(result) == 3:
+            kind, payload, error_msg = result
+
+            if kind == "error":
+                self._set_status(
+                    f"❌ Segmentation failed: {error_msg}", error=True
+                )
+                return
+
+            if kind == "kmeans":
+                self._result = payload["segmented"]
+                _show_bgr_on_canvas(self._result, self._window.segOutputCanvas)
+                _draw_kmeans_legend(
+                    payload["centroids"],
+                    payload["labels"],
+                    self._window.segLegendCanvas,
+                    is_color=self._image.ndim == 3,
+                )
+                self._window.kmInfoLbl.setText(
+                    f"k={payload['k']}  |  "
+                    f"Iterations: {payload['iterations']}  |  "
+                    f"Inertia: {payload['inertia']:.1f}"
+                )
+                self._window.segBtnSave.setEnabled(True)
+                self._set_status(
+                    f"✅ K-Means done — {payload['k']} clusters, "
+                    f"{payload['iterations']} iter(s), "
+                    f"inertia={payload['inertia']:.1f}"
+                )
+                return
+
+            # generic result (region growing, mean shift)
+            result = payload
+
+        if result is None:
+            if error_msg:
+                self._set_status(f"❌ Segmentation failed: {error_msg}", error=True)
+            else:
+                self._set_status("❌ Segmentation failed.", error=True)
+            return
+
+        self._result = result
+        _show_bgr_on_canvas(result, self._window.segOutputCanvas)
+        self._window.segLegendCanvas.setText("")
+        self._window.segLegendCanvas.setPixmap(QPixmap())
+        self._window.segBtnSave.setEnabled(True)
+        method = self._window.segMethodCombo.currentText()
+        if "region" in method.lower():
+            self._set_status(
+                f"✅ Done — {len(self._seeds)} region(s) grown, "
+                f"threshold = {self._window.regionThreshSpin.value()}"
+            )
+        elif "mean" in method.lower() and "shift" in method.lower():
+            self._set_status(
+                "✅ Done — Mean Shift segmentation complete "
+                f"(spatial={self._window.msSpatialSpin.value()}, "
+                f"color={self._window.msColorSpin.value()}, "
+                f"iter={self._window.msIterSpin.value()})"
+            )
+        else:
+            self._set_status("✅ Done.")
+
+    # ------------------------------------------------------------------
+    def _save(self):
+        if self._result is None:
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self._window, "Save Result", "segmented.png",
+            "PNG (*.png);;JPEG (*.jpg)"
+        )
+        if path:
+            cv2.imwrite(path, self._result)
+            self._set_status(f"💾 Saved to {Path(path).name}")
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _refresh_input_canvas(self):
+        """Display current image with seed markers drawn on it."""
         if self._image is None:
             return
         vis = self._image.copy()
-        _SEED_COLORS = [
-            (0, 0, 255), (0, 255, 0), (255, 0, 0),
-            (0, 200, 255), (255, 0, 200), (255, 200, 0),
-        ]
+
+        # Draw each seed as a cross + circle
         for idx, (sx, sy) in enumerate(self._seeds):
-            bgr = _SEED_COLORS[idx % len(_SEED_COLORS)]
+            colour_map = [
+                (0,   0,   255),
+                (0,   255, 0  ),
+                (255, 0,   0  ),
+                (0,   200, 255),
+                (255, 0,   200),
+                (255, 200, 0  ),
+            ]
+            bgr = colour_map[idx % len(colour_map)]
             r   = 8
             cv2.circle(vis, (sx, sy), r, bgr, 2)
             cv2.line(vis, (sx - r, sy), (sx + r, sy), bgr, 2)
             cv2.line(vis, (sx, sy - r), (sx, sy + r), bgr, 2)
             cv2.putText(vis, str(idx + 1), (sx + r + 2, sy + 4),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, bgr, 1, cv2.LINE_AA)
-        _show_bgr(vis, self._window.segInputCanvas)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, bgr, 1,
+                        cv2.LINE_AA)
 
-    # ----------------------------------------------------------------- apply
-    def _apply(self):
-        if self._image is None:
-            return
+        _show_bgr_on_canvas(vis, self._window.segInputCanvas)
 
-        method = self._window.segMethodCombo.currentIndex()
-
-        self._window.segBtnApply.setEnabled(False)
-        self._window.segBtnLoad.setEnabled(False)
-
-        if method == METHOD_KMEANS:
-            k = self._window.kmClustersSpin.value()
-            self._set_status(f"⏳ Running K-Means with k={k}…")
-            self._worker = _SegWorker(
-                _kmeans_worker_fn, (self._image, k)
-            )
-        else:
-            if not self._seeds:
-                self._set_status("⚠️ Place at least one seed first.", error=True)
-                self._window.segBtnApply.setEnabled(True)
-                self._window.segBtnLoad.setEnabled(True)
-                return
-            threshold = self._window.regionThreshSpin.value()
-            self._set_status("⏳ Growing regions…")
-            self._worker = _SegWorker(
-                _region_worker_fn, (self._image, self._seeds, threshold)
-            )
-
-        self._worker.finished.connect(self._on_result)
-        self._worker.start()
-
-    # --------------------------------------------------------------- result
-    def _on_result(self, kind: str, payload):
-        self._window.segBtnApply.setEnabled(True)
-        self._window.segBtnLoad.setEnabled(True)
-
-        if kind == "error":
-            self._set_status(f"❌ Error: {payload}", error=True)
-            return
-
-        if kind == "kmeans":
-            self._result_img = payload["segmented"]
-            _show_bgr(self._result_img, self._window.segOutputCanvas)
-            _draw_kmeans_legend(
-                payload["centroids"],
-                payload["labels"],
-                self._window.segLegendCanvas,
-                is_color=self._image.ndim == 3,
-            )
-            self._window.kmInfoLbl.setText(
-                f"k={payload['k']}  |  "
-                f"Iterations: {payload['iterations']}  |  "
-                f"Inertia: {payload['inertia']:.1f}"
-            )
-            self._set_status(
-                f"✅ K-Means done — {payload['k']} clusters, "
-                f"{payload['iterations']} iter(s), "
-                f"inertia={payload['inertia']:.1f}"
-            )
-
-        elif kind == "region":
-            self._result_img = payload
-            _show_bgr(self._result_img, self._window.segOutputCanvas)
-            self._window.segLegendCanvas.setText("")
-            self._window.segLegendCanvas.setPixmap(QPixmap())
-            self._set_status(
-                f"✅ Region Growing done — "
-                f"{len(self._seeds)} region(s) grown, "
-                f"threshold={self._window.regionThreshSpin.value()}"
-            )
-
-        self._window.segBtnSave.setEnabled(True)
-
-    # ------------------------------------------------------------------ save
-    def _save(self):
-        if self._result_img is None:
-            return
-        path, _ = QFileDialog.getSaveFileName(
-            self._window, "Save Result", "segmentation_result.png",
-            "PNG (*.png);;JPEG (*.jpg)"
-        )
-        if path:
-            cv2.imwrite(path, self._result_img)
-            self._set_status(f"💾 Saved to {Path(path).name}")
-
-    # ---------------------------------------------------------------- helpers
     def _set_status(self, msg: str, error: bool = False):
         colour = "#cc4444" if error else "#88cc88"
         self._window.segStatusLbl.setStyleSheet(
-            f"color:{colour}; font-size:10pt;"
+            f"color: {colour}; font-size: 10pt;"
         )
         self._window.segStatusLbl.setText(msg)
         self.status_message.emit(msg)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Canvas helpers (private to this module)
+# Shared canvas utility
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _show_bgr(img: np.ndarray, label) -> None:
-    lw = max(label.width(), 1)
+def _show_bgr_on_canvas(img: np.ndarray, label) -> None:
+    """Convert a BGR/BGRA numpy array to QPixmap and fit it into `label`."""
+    lw = max(label.width(),  1)
     lh = max(label.height(), 1)
-    if img.ndim == 2:
-        h, w = img.shape
-        qimg = QImage(img.data, w, h, w, QImage.Format_Grayscale8)
+
+    h, w = img.shape[:2]
+    c    = img.shape[2] if img.ndim == 3 else 1
+
+    if c == 4:
+        # BGRA → RGBA
+        rgba = cv2.cvtColor(img, cv2.COLOR_BGRA2RGBA)
+        qimg = QImage(rgba.data, w, h, 4 * w, QImage.Format_RGBA8888)
     else:
-        h, w = img.shape[:2]
-        c    = img.shape[2]
-        if c == 4:
-            rgba = cv2.cvtColor(img, cv2.COLOR_BGRA2RGBA)
-            qimg = QImage(rgba.data, w, h, 4 * w, QImage.Format_RGBA8888)
-        else:
-            rgb  = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            qimg = QImage(rgb.data, w, h, 3 * w, QImage.Format_RGB888)
+        rgb  = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        qimg = QImage(rgb.data, w, h, 3 * w, QImage.Format_RGB888)
+
     pix = QPixmap.fromImage(qimg).scaled(
-        lw, lh, Qt.KeepAspectRatio, Qt.SmoothTransformation
+        lw, lh,
+        aspectRatioMode=Qt.KeepAspectRatio,
+        transformMode=Qt.SmoothTransformation
     )
     label.setPixmap(pix)
 
