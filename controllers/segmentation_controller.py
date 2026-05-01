@@ -25,6 +25,7 @@ from PyQt5.QtGui import QImage, QPixmap, QPainter, QPen, QBrush, QColor
 from PyQt5.QtWidgets import QFileDialog, QMainWindow, QListWidgetItem
 
 from core.segmentation.region_growing import region_growing
+from core.segmentation.mean_shift import mean_shift_segmentation
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -32,33 +33,90 @@ from core.segmentation.region_growing import region_growing
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _worker_fn(image: np.ndarray,
+               method: str,
                seeds: list[tuple[int, int]],
                threshold: int,
+               km_clusters: int,
+               ms_spatial_radius: int,
+               ms_color_radius: int,
+               ms_max_iter: int,
                queue: mp.Queue) -> None:
     try:
-        result = region_growing(image, seeds, threshold)
-        queue.put(result)
+        method = method.lower()
+
+        if "region" in method:
+            result = region_growing(image, seeds, threshold)
+        elif "mean" in method and "shift" in method:
+            original_h, original_w = image.shape[:2]
+            small = cv2.resize(image, (100, 100), interpolation=cv2.INTER_AREA)
+
+            result_small = mean_shift_segmentation(
+                small,
+                spatial_radius=ms_spatial_radius,
+                color_radius=ms_color_radius,
+                max_iter=ms_max_iter,
+                progress_queue=queue,
+            )
+            result = cv2.resize(
+                result_small,
+                (original_w, original_h),
+                interpolation=cv2.INTER_NEAREST,
+            )
+        elif "k" in method and "means" in method:
+            raise NotImplementedError("K-Means is not implemented yet in this controller")
+        else:
+            raise ValueError(f"Unknown segmentation method: {method}")
+
+        queue.put(("result", result, None))
     except Exception as exc:
-        queue.put(None)
+        queue.put(("error", None, str(exc)))
 
 
 class _SegWorker(QThread):
     finished = pyqtSignal(object)
+    progress = pyqtSignal(str)
 
-    def __init__(self, image, seeds, threshold):
+    def __init__(self,
+                 image,
+                 method,
+                 seeds,
+                 threshold,
+                 km_clusters,
+                 ms_spatial_radius,
+                 ms_color_radius,
+                 ms_max_iter):
         super().__init__()
-        self._image     = image
-        self._seeds     = seeds
-        self._threshold = threshold
+        self._image             = image
+        self._method            = method
+        self._seeds             = seeds
+        self._threshold         = threshold
+        self._km_clusters       = km_clusters
+        self._ms_spatial_radius = ms_spatial_radius
+        self._ms_color_radius   = ms_color_radius
+        self._ms_max_iter       = ms_max_iter
 
     def run(self):
         q = mp.Queue()
         p = mp.Process(target=_worker_fn,
-                       args=(self._image, self._seeds, self._threshold, q))
+                       args=(
+                           self._image,
+                           self._method,
+                           self._seeds,
+                           self._threshold,
+                           self._km_clusters,
+                           self._ms_spatial_radius,
+                           self._ms_color_radius,
+                           self._ms_max_iter,
+                           q,
+                       ))
         p.start()
         while True:
             if not q.empty():
-                self.finished.emit(q.get())
+                message = q.get()
+                if isinstance(message, tuple) and message and message[0] == "progress":
+                    self.progress.emit(f"⏳ Mean Shift processing... {message[1]}%")
+                    continue
+                self.finished.emit(message)
                 break
             self.msleep(40)
         p.join()
@@ -132,6 +190,39 @@ class SegmentationController(QObject):
         w.segBtnApply.clicked.connect(self._apply)
         w.segBtnSave.clicked.connect(self._save)
         w.segBtnClearSeeds.clicked.connect(self._clear_seeds)
+        w.segMethodCombo.currentTextChanged.connect(self._on_method_changed)
+        self._on_method_changed(w.segMethodCombo.currentText())
+
+    # ------------------------------------------------------------------
+    def _on_method_changed(self, method: str):
+        method = method.lower()
+
+        self._window.kmeansParamsGroup.setVisible("k-means" in method)
+        self._window.regionParamsGroup.setVisible("region" in method)
+        self._window.meanShiftParamsGroup.setVisible(
+            "mean" in method and "shift" in method
+        )
+        if "region" in method:
+            self._window.segInputTitleLbl.setText(
+                "Input Image  (click to place seeds)"
+            )
+        else:
+            self._window.segInputTitleLbl.setText("Input Image")
+
+        self._window.segBtnClearSeeds.setEnabled("region" in method)
+        self._update_apply_state()
+
+    # ------------------------------------------------------------------
+    def _update_apply_state(self):
+        if self._image is None:
+            self._window.segBtnApply.setEnabled(False)
+            return
+
+        method = self._window.segMethodCombo.currentText().lower()
+        if "region" in method:
+            self._window.segBtnApply.setEnabled(len(self._seeds) > 0)
+        else:
+            self._window.segBtnApply.setEnabled(True)
 
     # ------------------------------------------------------------------
     def _load_image(self):
@@ -165,13 +256,17 @@ class SegmentationController(QObject):
 
         name = Path(path).name
         self._window.segImageNameLbl.setText(name)
-        self._window.segBtnApply.setEnabled(False)   # need seeds first
+        self._update_apply_state()
         self._window.segBtnSave.setEnabled(False)
-        self._set_status(f"Loaded: {name}  |  Click image to add seed points.")
+        self._set_status(f"Loaded: {name}")
 
     # ------------------------------------------------------------------
     def _on_canvas_click(self, x: int, y: int):
         if self._image is None:
+            return
+        method = self._window.segMethodCombo.currentText().lower()
+        if "region" not in method:
+            self._set_status("Seeds are only used with Region Growing.")
             return
         self._seeds.append((x, y))
 
@@ -180,7 +275,7 @@ class SegmentationController(QObject):
         self._window.segSeedsList.addItem(item)
 
         self._refresh_input_canvas()
-        self._window.segBtnApply.setEnabled(True)
+        self._update_apply_state()
         self._set_status(
             f"{len(self._seeds)} seed(s) placed — ready to apply."
         )
@@ -189,41 +284,85 @@ class SegmentationController(QObject):
     def _clear_seeds(self):
         self._seeds = []
         self._window.segSeedsList.clear()
-        self._window.segBtnApply.setEnabled(False)
+        self._update_apply_state()
         self._refresh_input_canvas()
         self._set_status("Seeds cleared.")
 
     # ------------------------------------------------------------------
     def _apply(self):
-        if self._image is None or not self._seeds:
+        if self._image is None:
+            return
+
+        method = self._window.segMethodCombo.currentText()
+        method_l = method.lower()
+
+        if "region" in method_l and not self._seeds:
+            self._set_status("Please add at least one seed for Region Growing.",
+                             error=True)
             return
 
         threshold = self._window.regionThreshSpin.value()
+        km_clusters = self._window.kmClustersSpin.value()
+        ms_spatial_radius = self._window.msSpatialSpin.value()
+        ms_color_radius = self._window.msColorSpin.value()
+        ms_max_iter = self._window.msIterSpin.value()
 
         self._window.segBtnApply.setEnabled(False)
         self._window.segBtnLoad.setEnabled(False)
-        self._set_status("⏳ Growing regions…")
+        self._set_status(f"⏳ Processing {method}…")
 
-        self._worker = _SegWorker(self._image, self._seeds, threshold)
+        self._worker = _SegWorker(
+            self._image,
+            method,
+            self._seeds,
+            threshold,
+            km_clusters,
+            ms_spatial_radius,
+            ms_color_radius,
+            ms_max_iter,
+        )
+        self._worker.progress.connect(self._set_status)
         self._worker.finished.connect(self._on_result)
         self._worker.start()
 
     # ------------------------------------------------------------------
     def _on_result(self, result):
-        self._window.segBtnApply.setEnabled(True)
         self._window.segBtnLoad.setEnabled(True)
+        self._update_apply_state()
+
+        error_msg = None
+        if isinstance(result, tuple) and len(result) == 3:
+            kind, payload, error_msg = result
+            if kind == "error":
+                result = None
+            else:
+                result = payload
 
         if result is None:
-            self._set_status("❌ Segmentation failed.", error=True)
+            if error_msg:
+                self._set_status(f"❌ Segmentation failed: {error_msg}", error=True)
+            else:
+                self._set_status("❌ Segmentation failed.", error=True)
             return
 
         self._result = result
         _show_bgr_on_canvas(result, self._window.segOutputCanvas)
         self._window.segBtnSave.setEnabled(True)
-        self._set_status(
-            f"✅ Done — {len(self._seeds)} region(s) grown, "
-            f"threshold = {self._window.regionThreshSpin.value()}"
-        )
+        method = self._window.segMethodCombo.currentText()
+        if "region" in method.lower():
+            self._set_status(
+                f"✅ Done — {len(self._seeds)} region(s) grown, "
+                f"threshold = {self._window.regionThreshSpin.value()}"
+            )
+        elif "mean" in method.lower() and "shift" in method.lower():
+            self._set_status(
+                "✅ Done — Mean Shift segmentation complete "
+                f"(spatial={self._window.msSpatialSpin.value()}, "
+                f"color={self._window.msColorSpin.value()}, "
+                f"iter={self._window.msIterSpin.value()})"
+            )
+        else:
+            self._set_status("✅ Done.")
 
     # ------------------------------------------------------------------
     def _save(self):

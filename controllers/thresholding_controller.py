@@ -28,17 +28,34 @@ from PyQt5.QtWidgets import QFileDialog, QMainWindow
 
 # Algorithms live in core/Thresholding/
 from core.Thresholding.spectral_thresholding import spectral_threshold
+from core.Thresholding.otsu import otsu_threshold
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Worker – runs in a QThread, algorithm in a child Process
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _worker_fn(gray: np.ndarray, n_modes: int, queue: mp.Queue) -> None:
-    """Top-level function (picklable) executed in a child process."""
+def _worker_fn(gray: np.ndarray, method: str, n_modes: int, queue: mp.Queue):
     try:
-        result, thresholds = spectral_threshold(gray, n_modes=n_modes)
+        method = method.lower()
+
+        if "otsu" in method:
+            threshold_value, result = otsu_threshold(gray)
+            thresholds = [threshold_value]
+
+        elif "optimal" in method:
+            # add your optimal implementation here later
+            threshold_value, result = otsu_threshold(gray)   # temporary
+            thresholds = [threshold_value]
+
+        elif "spectral" in method:
+            result, thresholds = spectral_threshold(gray, n_modes=n_modes)
+
+        else:
+            raise ValueError(f"Unknown method: {method}")
+
         queue.put((result, thresholds))
+
     except Exception as exc:
         queue.put((None, str(exc)))
 
@@ -46,15 +63,16 @@ def _worker_fn(gray: np.ndarray, n_modes: int, queue: mp.Queue) -> None:
 class _ThresholdWorker(QThread):
     finished = pyqtSignal(object, object)   # (np.ndarray | None, list | str)
 
-    def __init__(self, gray: np.ndarray, n_modes: int):
+    def __init__(self, gray: np.ndarray, method: str, n_modes: int):
         super().__init__()
         self._gray    = gray
+        self._method  = method
         self._n_modes = n_modes
 
     def run(self):
         q = mp.Queue()
         p = mp.Process(target=_worker_fn,
-                       args=(self._gray, self._n_modes, q))
+                       args=(self._gray, self._method, self._n_modes, q))
         p.start()
         while True:
             if not q.empty():
@@ -86,6 +104,20 @@ class ThresholdingController(QObject):
         w.threshBtnLoad.clicked.connect(self._load_image)
         w.threshBtnApply.clicked.connect(self._apply)
         w.threshBtnSave.clicked.connect(self._save)
+        w.threshMethodCombo.currentTextChanged.connect(self._on_method_changed)
+        self._on_method_changed(w.threshMethodCombo.currentText())
+
+    # ------------------------------------------------------------------
+    def _on_method_changed(self, method: str):
+        method = method.lower()
+
+        self._window.optimalParamsGroup.setVisible("optimal" in method)
+        self._window.spectralParamsGroup.setVisible("spectral" in method)
+
+        # Otsu has no tunable parameters in this UI.
+        if "otsu" in method:
+            self._window.optimalParamsGroup.setVisible(False)
+            self._window.spectralParamsGroup.setVisible(False)
 
     # ------------------------------------------------------------------
     def _load_image(self):
@@ -127,6 +159,7 @@ class ThresholdingController(QObject):
         if self._gray_image is None:
             return
 
+        method = self._window.threshMethodCombo.currentText()
         n_modes = self._window.spectralModesSpin.value()
 
         # Disable controls while running
@@ -134,7 +167,7 @@ class ThresholdingController(QObject):
         self._window.threshBtnLoad.setEnabled(False)
         self._set_status("⏳ Processing…")
 
-        self._worker = _ThresholdWorker(self._gray_image, n_modes)
+        self._worker = _ThresholdWorker(self._gray_image, method, n_modes)
         self._worker.finished.connect(self._on_result)
         self._worker.start()
 
