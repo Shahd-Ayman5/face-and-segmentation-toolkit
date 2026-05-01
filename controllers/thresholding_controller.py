@@ -1,18 +1,18 @@
 """
-controllers/thresholding_controller.py
----------------------------------------
-Controls the Thresholding tab in main.ui.
+controllers/thresholding_tab_controller.py
+-------------------------------------------
+Unified controller for the Thresholding tab.
 
-Responsibilities
-----------------
-- Load a grayscale image via a file dialog.
-- Let the user pick a thresholding method from the combo-box
-  (currently: Spectral Thresholding).
-- Run the algorithm off the GUI thread (QThread + subprocess via
-  multiprocessing.Queue – same pattern as the rest of the project).
-- Display input image, output image, and a histogram with threshold
-  lines drawn on it.
-- Save the result to disk.
+Manages the combo-box switch between:
+  • Optimal Thresholding   (index 0) — Lolo's algorithm
+  • Spectral Thresholding  (index 1) — Shahod's algorithm
+
+All shared widgets (Load, Apply, Save, canvases, histogram, status)
+live once in the .ui; this controller owns them and delegates the
+actual algorithm work to the two sub-controllers.
+
+Sub-controllers no longer bind_ui() themselves — this class is the
+single point of contact with the window.
 """
 
 from __future__ import annotations
@@ -22,72 +22,107 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-from PyQt5.QtCore import QObject, QThread, pyqtSignal
-from PyQt5.QtGui import QImage, QPixmap, QPainter, QPen, QColor, QFont
+from PyQt5.QtCore import QObject, QThread, Qt, pyqtSignal
+from PyQt5.QtGui import QColor, QFont, QImage, QPainter, QPen, QPixmap
 from PyQt5.QtWidgets import QFileDialog, QMainWindow
 
-# Algorithms live in core/Thresholding/
+# ── algorithms ────────────────────────────────────────────────────────────────
+from core.thresholding.optimal import apply_optimal_threshold
 from core.Thresholding.spectral_thresholding import spectral_threshold
 
+METHOD_OPTIMAL  = 0
+METHOD_SPECTRAL = 1
+
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Worker – runs in a QThread, algorithm in a child Process
+# Workers
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _worker_fn(gray: np.ndarray, n_modes: int, queue: mp.Queue) -> None:
-    """Top-level function (picklable) executed in a child process."""
+def _optimal_worker_fn(gray: np.ndarray, queue: mp.Queue) -> None:
+    try:
+        queue.put(("optimal", apply_optimal_threshold(gray)))
+    except Exception as exc:
+        queue.put(("error", str(exc)))
+
+
+def _spectral_worker_fn(gray: np.ndarray, n_modes: int, queue: mp.Queue) -> None:
     try:
         result, thresholds = spectral_threshold(gray, n_modes=n_modes)
-        queue.put((result, thresholds))
+        queue.put(("spectral", {"binary": result, "thresholds": thresholds}))
     except Exception as exc:
-        queue.put((None, str(exc)))
+        queue.put(("error", str(exc)))
 
 
-class _ThresholdWorker(QThread):
-    finished = pyqtSignal(object, object)   # (np.ndarray | None, list | str)
+class _ThreshWorker(QThread):
+    finished = pyqtSignal(str, object)   # (kind, payload)
 
-    def __init__(self, gray: np.ndarray, n_modes: int):
+    def __init__(self, target_fn, args: tuple):
         super().__init__()
-        self._gray    = gray
-        self._n_modes = n_modes
+        self._target = target_fn
+        self._args   = args
 
     def run(self):
         q = mp.Queue()
-        p = mp.Process(target=_worker_fn,
-                       args=(self._gray, self._n_modes, q))
+        p = mp.Process(target=self._target, args=(*self._args, q))
         p.start()
         while True:
             if not q.empty():
-                result, extra = q.get()
-                self.finished.emit(result, extra)
+                kind, payload = q.get()
+                self.finished.emit(kind, payload)
                 break
             self.msleep(40)
         p.join()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Controller
+# Unified Controller
 # ─────────────────────────────────────────────────────────────────────────────
 
-class ThresholdingController(QObject):
+class ThresholdingTabController(QObject):
     status_message = pyqtSignal(str)
 
     def __init__(self, window: QMainWindow):
         super().__init__(window)
-        self._window      = window
-        self._gray_image  : np.ndarray | None = None
-        self._result      : np.ndarray | None = None
-        self._thresholds  : list[int]          = []
-        self._worker      : _ThresholdWorker  | None = None
+        self._window     = window
+        self._gray       : np.ndarray | None = None
+        self._result_img : np.ndarray | None = None
+        self._worker     : _ThreshWorker | None = None
 
-    # ------------------------------------------------------------------
+    # ------------------------------------------------------------------ bind
     def bind_ui(self):
         w = self._window
         w.threshBtnLoad.clicked.connect(self._load_image)
         w.threshBtnApply.clicked.connect(self._apply)
         w.threshBtnSave.clicked.connect(self._save)
+        w.threshMethodCombo.currentIndexChanged.connect(self._on_method_changed)
 
-    # ------------------------------------------------------------------
+        # Show the correct params group on startup
+        self._on_method_changed(w.threshMethodCombo.currentIndex())
+
+    # --------------------------------------------------------- method switch
+    def _on_method_changed(self, index: int):
+        w = self._window
+        is_optimal  = (index == METHOD_OPTIMAL)
+        is_spectral = (index == METHOD_SPECTRAL)
+
+        w.optimalParamsGroup.setVisible(is_optimal)
+        w.spectralParamsGroup.setVisible(is_spectral)
+
+        # Reset outputs when switching so stale results are not shown
+        self._result_img = None
+        w.threshOutputCanvas.setText("Result will appear here")
+        w.threshOutputCanvas.setPixmap(QPixmap())
+        w.threshHistCanvas.setText(
+            "Histogram will appear here after applying"
+        )
+        w.threshHistCanvas.setPixmap(QPixmap())
+        w.threshResultInfoLbl.setText("")
+        w.threshBtnSave.setEnabled(False)
+
+        if self._gray is not None:
+            w.threshBtnApply.setEnabled(True)
+
+    # ------------------------------------------------------------------ load
     def _load_image(self):
         path, _ = QFileDialog.getOpenFileName(
             self._window, "Open Grayscale Image", "",
@@ -101,20 +136,18 @@ class ThresholdingController(QObject):
             self._set_status("❌ Could not read image.", error=True)
             return
 
-        self._gray_image = img
-        self._result     = None
-        self._thresholds = []
+        self._gray       = img
+        self._result_img = None
 
-        # Display input
-        self._show_on_canvas(img, self._window.threshInputCanvas, gray=True)
+        _show_gray(img, self._window.threshInputCanvas)
 
-        # Clear output
         self._window.threshOutputCanvas.setText("Result will appear here")
         self._window.threshOutputCanvas.setPixmap(QPixmap())
         self._window.threshHistCanvas.setText(
             "Histogram with threshold lines will appear here after applying"
         )
         self._window.threshHistCanvas.setPixmap(QPixmap())
+        self._window.threshResultInfoLbl.setText("")
 
         name = Path(path).name
         self._window.threshImageNameLbl.setText(name)
@@ -122,146 +155,152 @@ class ThresholdingController(QObject):
         self._window.threshBtnSave.setEnabled(False)
         self._set_status(f"Loaded: {name}")
 
-    # ------------------------------------------------------------------
+    # ----------------------------------------------------------------- apply
     def _apply(self):
-        if self._gray_image is None:
+        if self._gray is None:
             return
 
-        n_modes = self._window.spectralModesSpin.value()
-
-        # Disable controls while running
         self._window.threshBtnApply.setEnabled(False)
         self._window.threshBtnLoad.setEnabled(False)
         self._set_status("⏳ Processing…")
 
-        self._worker = _ThresholdWorker(self._gray_image, n_modes)
+        method = self._window.threshMethodCombo.currentIndex()
+
+        if method == METHOD_OPTIMAL:
+            self._worker = _ThreshWorker(
+                _optimal_worker_fn,
+                (self._gray,)
+            )
+        else:
+            n_modes = self._window.spectralModesSpin.value()
+            self._worker = _ThreshWorker(
+                _spectral_worker_fn,
+                (self._gray, n_modes)
+            )
+
         self._worker.finished.connect(self._on_result)
         self._worker.start()
 
-    # ------------------------------------------------------------------
-    def _on_result(self, result, extra):
+    # --------------------------------------------------------------- result
+    def _on_result(self, kind: str, payload):
         self._window.threshBtnApply.setEnabled(True)
         self._window.threshBtnLoad.setEnabled(True)
 
-        if result is None:
-            self._set_status(f"❌ Error: {extra}", error=True)
+        if kind == "error":
+            self._set_status(f"❌ Error: {payload}", error=True)
             return
 
-        thresholds: list[int] = extra
-        self._result     = result
-        self._thresholds = thresholds
+        if kind == "optimal":
+            binary     = payload["binary"]
+            threshold  = payload["threshold"]
+            iterations = payload["iterations"]
+            history    = payload["history"]
 
-        # Show segmented image
-        self._show_on_canvas(result, self._window.threshOutputCanvas, gray=True)
+            self._result_img = binary
+            _show_gray(binary, self._window.threshOutputCanvas)
+            _draw_histogram(self._gray, [threshold],
+                            self._window.threshHistCanvas, ["#ff4444"])
 
-        # Draw histogram
-        self._draw_histogram(self._gray_image, thresholds,
-                             self._window.threshHistCanvas)
+            self._window.threshResultInfoLbl.setText(
+                f"Threshold: {threshold}  |  "
+                f"Iterations: {iterations}  |  "
+                "History: " + " → ".join(f"{v:.1f}" for v in history)
+            )
+            self._set_status(
+                f"✅ Optimal done — T={threshold}, "
+                f"converged in {iterations} iteration(s)"
+            )
+
+        elif kind == "spectral":
+            binary     = payload["binary"]
+            thresholds = payload["thresholds"]
+
+            self._result_img = binary
+            _show_gray(binary, self._window.threshOutputCanvas)
+            _draw_histogram(self._gray, thresholds,
+                            self._window.threshHistCanvas)
+
+            n_regions = len(thresholds) + 1
+            self._window.threshResultInfoLbl.setText(
+                f"{n_regions} regions  |  Thresholds: {thresholds}"
+            )
+            self._set_status(
+                f"✅ Spectral done — {n_regions} regions, "
+                f"thresholds: {thresholds}"
+            )
 
         self._window.threshBtnSave.setEnabled(True)
-        n_modes = len(thresholds) + 1
-        self._set_status(
-            f"✅ Done — {n_modes} regions, thresholds: {thresholds}"
-        )
 
-    # ------------------------------------------------------------------
+    # ------------------------------------------------------------------ save
     def _save(self):
-        if self._result is None:
+        if self._result_img is None:
             return
         path, _ = QFileDialog.getSaveFileName(
-            self._window, "Save Result", "thresholded.png",
+            self._window, "Save Result", "threshold_result.png",
             "PNG (*.png);;JPEG (*.jpg)"
         )
         if path:
-            cv2.imwrite(path, self._result)
+            cv2.imwrite(path, self._result_img)
             self._set_status(f"💾 Saved to {Path(path).name}")
 
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
-
+    # ---------------------------------------------------------------- helpers
     def _set_status(self, msg: str, error: bool = False):
         colour = "#cc4444" if error else "#88cc88"
         self._window.threshStatusLbl.setStyleSheet(
-            f"color: {colour}; font-size: 10pt;"
+            f"color:{colour}; font-size:10pt;"
         )
         self._window.threshStatusLbl.setText(msg)
         self.status_message.emit(msg)
 
-    # ------------------------------------------------------------------
-    @staticmethod
-    def _show_on_canvas(img: np.ndarray, label, *, gray: bool = False):
-        """Fit `img` into `label` preserving aspect ratio."""
-        lw = max(label.width(),  1)
-        lh = max(label.height(), 1)
 
-        if gray:
-            h, w     = img.shape[:2]
-            qimg     = QImage(img.data, w, h, w, QImage.Format_Grayscale8)
-        else:
-            h, w, c  = img.shape
-            bytes_per_line = c * w
-            fmt = QImage.Format_RGB888 if c == 3 else QImage.Format_RGBA8888
-            # OpenCV is BGR; swap channels for Qt
-            rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            qimg = QImage(rgb.data, w, h, bytes_per_line, fmt)
+# ─────────────────────────────────────────────────────────────────────────────
+# Canvas helpers (private to this module)
+# ─────────────────────────────────────────────────────────────────────────────
 
-        pix = QPixmap.fromImage(qimg).scaled(
-            lw, lh,
-            aspectRatioMode=1,          # Qt.KeepAspectRatio
-            transformMode=1             # Qt.SmoothTransformation
-        )
-        label.setPixmap(pix)
+def _show_gray(img: np.ndarray, label) -> None:
+    lw = max(label.width(), 1)
+    lh = max(label.height(), 1)
+    h, w = img.shape[:2]
+    qimg = QImage(img.data, w, h, w, QImage.Format_Grayscale8)
+    pix  = QPixmap.fromImage(qimg).scaled(
+        lw, lh, Qt.KeepAspectRatio, Qt.SmoothTransformation
+    )
+    label.setPixmap(pix)
 
-    # ------------------------------------------------------------------
-    @staticmethod
-    def _draw_histogram(gray: np.ndarray,
-                        thresholds: list[int],
-                        label) -> None:
-        """
-        Draw the image histogram and overlay vertical lines at each threshold.
-        Renders into a QPixmap and sets it on `label`.
-        """
-        W = max(label.width(),  512)
-        H = max(label.height(), 128)
 
-        hist, _ = np.histogram(gray.ravel(), bins=256, range=(0, 256))
-        hist_max = hist.max() if hist.max() > 0 else 1
+def _draw_histogram(
+    gray: np.ndarray,
+    thresholds: list[int],
+    label,
+    colours: list[str] | None = None,
+) -> None:
+    W = max(label.width(),  512)
+    H = max(label.height(), 128)
 
-        pix = QPixmap(W, H)
-        pix.fill(QColor("#0a0a0a"))
+    hist, _ = np.histogram(gray.ravel(), bins=256, range=(0, 256))
+    hist_max = hist.max() if hist.max() > 0 else 1
 
-        painter = QPainter(pix)
-
-        # ── Draw histogram bars ──────────────────────────────────────
-        bar_w = max(1, W // 256)
-        bar_colour = QColor("#4488cc")
-        painter.setPen(Qt.NoPen if hasattr(painter, 'NoPen') else QPen(bar_colour, 0))
-
-        from PyQt5.QtCore import Qt
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(bar_colour)
-
-        for i, count in enumerate(hist):
-            bar_h = int((count / hist_max) * (H - 10))
-            x     = int(i * W / 256)
-            painter.drawRect(x, H - bar_h, bar_w, bar_h)
-
-        # ── Draw threshold lines ─────────────────────────────────────
+    if colours is None:
         colours = ["#ff4444", "#ffaa00", "#44ff44",
                    "#ff44ff", "#44ffff", "#ffff44"]
-        font = QFont("Arial", 8)
-        painter.setFont(font)
 
-        for idx, t in enumerate(thresholds):
-            x   = int(t * W / 256)
-            col = QColor(colours[idx % len(colours)])
-            pen = QPen(col, 2)
-            painter.setPen(pen)
-            painter.drawLine(x, 0, x, H)
+    pix = QPixmap(W, H)
+    pix.fill(QColor("#0a0a0a"))
+    painter = QPainter(pix)
 
-            # Label
-            painter.drawText(x + 2, 14 + idx * 14, f"T{idx+1}={t}")
+    bar_w = max(1, W // 256)
+    painter.setPen(Qt.NoPen)
+    painter.setBrush(QColor("#4488cc"))
+    for i, count in enumerate(hist):
+        bar_h = int((count / hist_max) * (H - 10))
+        painter.drawRect(int(i * W / 256), H - bar_h, bar_w, bar_h)
 
-        painter.end()
-        label.setPixmap(pix)
+    painter.setFont(QFont("Arial", 8))
+    for idx, t in enumerate(thresholds):
+        x = int(t * W / 256)
+        painter.setPen(QPen(QColor(colours[idx % len(colours)]), 2))
+        painter.drawLine(x, 0, x, H)
+        painter.drawText(x + 2, 14 + idx * 14, f"T={t}")
+
+    painter.end()
+    label.setPixmap(pix)
