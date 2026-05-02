@@ -47,7 +47,7 @@ class FaceDetectionController(QObject):
 
     def _on_load(self):
         path, _ = QFileDialog.getOpenFileName(
-            self.window, "Open Image", "", "Images (*.png *.jpg *.jpeg)"
+            self.window, "Open Image", "", "Images (*.png *.jpg *.jpeg *.pgm)"
         )
         if not path:
             return

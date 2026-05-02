@@ -1,13 +1,3 @@
-"""
-controllers/main_controller.py
---------------------------------
-Main application controller.
-Loads the UI and wires up all tab controllers:
-  - Face Detection  (existing)
-  - Thresholding    (new – Spectral Thresholding)
-  - Segmentation    (new – Region Growing)
-"""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -16,7 +6,8 @@ from PyQt5 import uic
 from PyQt5.QtCore import QObject
 from PyQt5.QtWidgets import QMainWindow, QMessageBox
 
-from controllers.face_controller import FaceDetectionController
+from controllers.face_detection_controller import FaceDetectionController
+from controllers.face_recognition_controller import FaceRecognitionController
 from controllers.thresholding_controller import ThresholdingController
 from controllers.segmentation_controller import SegmentationController
 
@@ -38,6 +29,10 @@ class AppController(QObject):
         self.face_controller = FaceDetectionController(self.window)
         self.face_controller.bind_ui(self.window)
 
+        # 1.5 Face recognition (new)
+        self.face_rec_controller = FaceRecognitionController(self.window)
+        self.face_rec_controller.bind_ui(self.window)
+
         # 2. Thresholding (Spectral)
         self.thresh_controller = ThresholdingController(self.window)
         self.thresh_controller.bind_ui()
@@ -55,6 +50,9 @@ class AppController(QObject):
 
         # ── Status bar ──────────────────────────────────────────────
         self.face_controller.status_message.connect(
+            self.window.statusbar.showMessage
+        )
+        self.face_rec_controller.status_message.connect(
             self.window.statusbar.showMessage
         )
         self.thresh_controller.status_message.connect(
