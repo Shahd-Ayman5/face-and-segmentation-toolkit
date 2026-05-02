@@ -10,8 +10,8 @@ from PyQt5.QtCore import QObject, Qt, pyqtSignal
 from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.QtWidgets import QFileDialog, QLabel, QMainWindow
 
-from core.face.pca_model import PCA
-from core.face.process_orl import IMG_SIZE, prepare_data
+from core.face.classifier import FaceClassifier
+from core.face.process_orl import IMG_SIZE
 
 
 class FaceRecognitionController(QObject):
@@ -32,14 +32,8 @@ class FaceRecognitionController(QObject):
         self.window = window
         self._image: Optional[np.ndarray] = None
 
-        # dataset
-        self._X: Optional[np.ndarray] = None
-        self._y: Optional[np.ndarray] = None
-        self._paths: List[Path] = []
-
         # model
-        self._pca: Optional[PCA] = None
-        self._proj: Optional[np.ndarray] = None
+        self._classifier: Optional[FaceClassifier] = None
 
     def bind_ui(self, window: QMainWindow):
         self._w = window
@@ -78,19 +72,17 @@ class FaceRecognitionController(QObject):
             norm = resized.astype(np.float32) / 255.0
             vec = norm.flatten()
 
-            inp_proj = self._pca.transform(np.expand_dims(vec, axis=0))
+            match = self._classifier.predict(vec)
 
-            # find nearest neighbour in projections
-            dists = np.linalg.norm(self._proj - inp_proj, axis=1)
-            idx = int(np.argmin(dists))
-
-            match_path = self._paths[idx]
+            match_path = match.image_path
             matched_img = cv2.imread(str(match_path))
             if matched_img is None:
                 matched_img = cv2.cvtColor(cv2.imread(str(match_path), cv2.IMREAD_GRAYSCALE), cv2.COLOR_GRAY2BGR)
 
             self._show(matched_img, self._LBL_OUTPUT)
-            self._widget(self._LBL_STATUS).setText(f"Matched: {match_path.name} (subject {self._y[idx]})")
+            self._widget(self._LBL_STATUS).setText(
+                f"Matched: {match_path.name} (subject {match.subject_id}, distance {match.distance:.4f})"
+            )
             self.status_message.emit("Recognition complete")
 
         except Exception as e:
@@ -98,21 +90,11 @@ class FaceRecognitionController(QObject):
             self.error_occurred.emit(str(e))
 
     def _ensure_model(self):
-        if self._pca is not None and self._proj is not None:
+        if self._classifier is not None:
             return
 
-        model_path = Path(__file__).resolve().parents[2] / "pca_model.pkl"
-
-        # load saved model
-        self._pca = PCA.load(str(model_path))
-
-        # train_projections already inside the loaded model
-        self._proj = self._pca.train_projections
-
-        # reload paths + labels to align with proj rows
-        X_train, X_test, y_train, y_test, train_paths, test_paths = prepare_data()
-        self._y     = y_train
-        self._paths = train_paths
+        model_path = Path(__file__).resolve().parents[2] / "face-and-segmentation-toolkit/pca_model.pkl"
+        self._classifier = FaceClassifier(str(model_path)).load()
 
 
         

@@ -42,7 +42,7 @@ def visualize_eigenfaces():
     import numpy as np
     import cv2
 
-    model_path = Path(__file__).parent / "pca_model.pkl"
+    model_path = Path(__file__).parent / "face-and-segmentation-toolkit/pca_model.pkl"
     pca = PCA.load(str(model_path))
 
     # show mean face

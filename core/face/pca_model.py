@@ -42,7 +42,7 @@ class PCA:
 
 
     # SAVE MODEL
-    def save(self, path="pca_model.pkl"):
+    def save(self, path="face-and-segmentation-toolkit/pca_model.pkl"):
         model = {
             "mean": self.mean,
             "eigenfaces": self.eigenfaces,
@@ -55,7 +55,7 @@ class PCA:
 
     # LOAD MODEL
     @staticmethod
-    def load(path="pca_model.pkl"):
+    def load(path="face-and-segmentation-toolkit/pca_model.pkl"):
         with open(path, "rb") as f:
             model = pickle.load(f)
 
