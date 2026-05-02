@@ -76,8 +76,7 @@ def _worker_fn(image: np.ndarray,
         elif "agglomerative" in method:
             original_h, original_w = image.shape[:2]
 
-            small = cv2.resize(image, (200, 200), interpolation=cv2.INTER_AREA)
-
+            small = image
             result_small = agglomerative_segmentation(
                 small,
                 n_clusters=aggl_clusters,

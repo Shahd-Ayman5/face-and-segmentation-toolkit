@@ -532,7 +532,7 @@
                 <item>
                  <widget class="QSpinBox" name="agglClustersSpin">
                   <property name="minimum"><number>2</number></property>
-                  <property name="maximum"><number>20</number></property>
+                  <property name="maximum"><number>50</number></property>
                   <property name="value"><number>8</number></property>
                  </widget>
                 </item>
