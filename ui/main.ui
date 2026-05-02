@@ -58,6 +58,11 @@
             <item><widget class="QPushButton" name="faceRecBtnLoad"><property name="text"><string>📂 Load Image</string></property></widget></item>
             <item><widget class="QPushButton" name="faceRecBtnRecognize"><property name="text"><string>🔎 Recognize</string></property><property name="enabled"><bool>false</bool></property></widget></item>
             <item><widget class="QLabel" name="faceRecStatusLbl"><property name="text"><string>—</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+            <!-- Confidence display (colour-coded after recognition) -->
+            <item><widget class="QLabel" name="faceRecConfidenceLbl"><property name="text"><string></string></property><property name="wordWrap"><bool>true</bool></property><property name="styleSheet"><string>font-size:10pt; padding:4px 0;</string></property></widget></item>
+            <item><widget class="QFrame" name="faceRecSep"><property name="frameShape"><enum>QFrame::HLine</enum></property><property name="frameShadow"><enum>QFrame::Sunken</enum></property></widget></item>
+            <!-- Evaluation button -->
+            <item><widget class="QPushButton" name="faceRecBtnEvaluate"><property name="text"><string>📊 Show Evaluation</string></property><property name="toolTip"><string>Run full test-set evaluation and show ROC curve, metrics and confusion matrix</string></property><property name="styleSheet"><string>background-color:#2a2060; color:#a5b4fc; border:1px solid #4a40a0; padding:6px; border-radius:4px;</string></property></widget></item>
             <item><spacer><property name="orientation"><enum>Qt::Vertical</enum></property></spacer></item>
            </layout>
           </widget>
@@ -125,24 +130,22 @@
             </widget>
            </item>
 
-           <!-- ── Combo: now has BOTH methods ── -->
            <item>
             <widget class="QComboBox" name="threshMethodCombo">
              <item><property name="text"><string>Optimal Thresholding</string></property></item>
              <item><property name="text"><string>Spectral Thresholding</string></property></item>
-              <item><property name="text"><string>Otsu Thresholding</string></property></item>
+             <item><property name="text"><string>Otsu Thresholding</string></property></item>
             </widget>
            </item>
 
            <item><widget class="QFrame" name="threshSep2"><property name="frameShape"><enum>QFrame::HLine</enum></property><property name="frameShadow"><enum>QFrame::Sunken</enum></property></widget></item>
 
-           <!-- ── OPTIMAL PARAMS GROUP (yours) ── -->
+           <!-- OPTIMAL PARAMS GROUP -->
            <item>
             <widget class="QGroupBox" name="optimalParamsGroup">
              <property name="title"><string>Optimal Parameters</string></property>
              <layout class="QVBoxLayout">
               <property name="spacing"><number>8</number></property>
-
               <item>
                <layout class="QHBoxLayout">
                 <item><widget class="QLabel" name="optMaxIterLbl"><property name="text"><string>Max iterations:</string></property></widget></item>
@@ -155,7 +158,6 @@
                 </item>
                </layout>
               </item>
-
               <item>
                <widget class="QLabel" name="optInfoLbl">
                 <property name="text"><string>Iteratively finds the best global threshold by averaging background and foreground means.</string></property>
@@ -163,19 +165,17 @@
                 <property name="styleSheet"><string>color:#aaa; font-size:9pt;</string></property>
                </widget>
               </item>
-
              </layout>
             </widget>
            </item>
 
-           <!-- ── SPECTRAL PARAMS GROUP (Shahod's – hidden by default) ── -->
+           <!-- SPECTRAL PARAMS GROUP -->
            <item>
             <widget class="QGroupBox" name="spectralParamsGroup">
              <property name="title"><string>Spectral Parameters</string></property>
              <property name="visible"><bool>false</bool></property>
              <layout class="QVBoxLayout">
               <property name="spacing"><number>8</number></property>
-
               <item>
                <layout class="QHBoxLayout">
                 <item><widget class="QLabel" name="spectralModesLbl"><property name="text"><string>Modes (regions):</string></property></widget></item>
@@ -188,7 +188,6 @@
                 </item>
                </layout>
               </item>
-
               <item>
                <widget class="QLabel" name="spectralInfoLbl">
                 <property name="text"><string>3 modes → 2 thresholds
@@ -197,7 +196,6 @@
                 <property name="styleSheet"><string>color:#aaa; font-size:9pt;</string></property>
                </widget>
               </item>
-
              </layout>
             </widget>
            </item>
@@ -218,7 +216,6 @@
             </widget>
            </item>
 
-           <!-- Result info line (threshold value, iterations) -->
            <item>
             <widget class="QLabel" name="threshResultInfoLbl">
              <property name="text"><string></string></property>
@@ -245,11 +242,9 @@
         <item>
          <layout class="QVBoxLayout">
           <property name="spacing"><number>6</number></property>
-
           <item>
            <layout class="QHBoxLayout">
             <property name="spacing"><number>8</number></property>
-
             <item>
              <widget class="QFrame" name="threshInputFrame">
               <property name="frameShape"><enum>QFrame::StyledPanel</enum></property>
@@ -269,7 +264,6 @@
               </layout>
              </widget>
             </item>
-
             <item>
              <widget class="QFrame" name="threshOutputFrame">
               <property name="frameShape"><enum>QFrame::StyledPanel</enum></property>
@@ -289,10 +283,8 @@
               </layout>
              </widget>
             </item>
-
            </layout>
           </item>
-
           <item>
            <widget class="QLabel" name="threshHistCanvas">
             <property name="text"><string>Histogram with threshold lines will appear here after applying</string></property>
@@ -302,7 +294,6 @@
             <property name="styleSheet"><string>background-color:#0a0a0a; border:1px solid #333; color:#555; font-size:10pt;</string></property>
            </widget>
           </item>
-
          </layout>
         </item>
 
@@ -349,24 +340,22 @@
             </widget>
            </item>
 
-           <!-- ── Combo: now has BOTH methods ── -->
            <item>
             <widget class="QComboBox" name="segMethodCombo">
              <item><property name="text"><string>K-Means</string></property></item>
              <item><property name="text"><string>Region Growing</string></property></item>
-                                           <item><property name="text"><string>Mean Shift</string></property></item>
+             <item><property name="text"><string>Mean Shift</string></property></item>
             </widget>
            </item>
 
            <item><widget class="QFrame" name="segSep2"><property name="frameShape"><enum>QFrame::HLine</enum></property><property name="frameShadow"><enum>QFrame::Sunken</enum></property></widget></item>
 
-           <!-- ── K-MEANS PARAMS GROUP (yours) ── -->
+           <!-- K-MEANS PARAMS GROUP -->
            <item>
             <widget class="QGroupBox" name="kmeansParamsGroup">
              <property name="title"><string>K-Means Parameters</string></property>
              <layout class="QVBoxLayout">
               <property name="spacing"><number>8</number></property>
-
               <item>
                <layout class="QHBoxLayout">
                 <item><widget class="QLabel" name="kmClustersLbl"><property name="text"><string>Clusters (k):</string></property></widget></item>
@@ -379,7 +368,6 @@
                 </item>
                </layout>
               </item>
-
               <item>
                <widget class="QLabel" name="kmInfoLbl">
                 <property name="text"><string></string></property>
@@ -387,19 +375,17 @@
                 <property name="styleSheet"><string>color:#a5b4fc; font-size:9pt;</string></property>
                </widget>
               </item>
-
              </layout>
             </widget>
            </item>
 
-           <!-- ── REGION GROWING PARAMS GROUP (Roro's – hidden by default) ── -->
+           <!-- REGION GROWING PARAMS GROUP -->
            <item>
             <widget class="QGroupBox" name="regionParamsGroup">
              <property name="title"><string>Region Growing Parameters</string></property>
              <property name="visible"><bool>false</bool></property>
              <layout class="QVBoxLayout">
               <property name="spacing"><number>8</number></property>
-
               <item>
                <layout class="QHBoxLayout">
                 <item><widget class="QLabel" name="regionThreshLbl"><property name="text"><string>Threshold:</string></property></widget></item>
@@ -412,7 +398,6 @@
                 </item>
                </layout>
               </item>
-
               <item>
                <widget class="QLabel" name="regionSeedsLbl">
                 <property name="text"><string>Seeds: click on image to add</string></property>
@@ -420,82 +405,74 @@
                 <property name="styleSheet"><string>color:#aaa; font-size:9pt;</string></property>
                </widget>
               </item>
-
               <item>
                <widget class="QPushButton" name="segBtnClearSeeds">
                 <property name="text"><string>🗑 Clear Seeds</string></property>
                </widget>
               </item>
-
               <item>
                <widget class="QListWidget" name="segSeedsList">
                 <property name="minimumHeight"><number>80</number></property>
                 <property name="maximumHeight"><number>100</number></property>
                </widget>
               </item>
-
              </layout>
             </widget>
            </item>
 
-                                    <!-- ── MEAN SHIFT PARAMS GROUP (hidden by default) ── -->
-                                    <item>
-                                          <widget class="QGroupBox" name="meanShiftParamsGroup">
-                                           <property name="title"><string>Mean Shift Parameters</string></property>
-                                           <property name="visible"><bool>false</bool></property>
-                                           <layout class="QVBoxLayout">
-                                                 <property name="spacing"><number>8</number></property>
-
-                                                 <item>
-                                                  <layout class="QHBoxLayout">
-                                                        <item><widget class="QLabel" name="msSpatialLbl"><property name="text"><string>Spatial radius:</string></property></widget></item>
-                                                        <item>
-                                                         <widget class="QSpinBox" name="msSpatialSpin">
-                                                               <property name="minimum"><number>1</number></property>
-                                                               <property name="maximum"><number>50</number></property>
-                                                               <property name="value"><number>10</number></property>
-                                                         </widget>
-                                                        </item>
-                                                  </layout>
-                                                 </item>
-
-                                                 <item>
-                                                  <layout class="QHBoxLayout">
-                                                        <item><widget class="QLabel" name="msColorLbl"><property name="text"><string>Color radius:</string></property></widget></item>
-                                                        <item>
-                                                         <widget class="QSpinBox" name="msColorSpin">
-                                                               <property name="minimum"><number>1</number></property>
-                                                               <property name="maximum"><number>100</number></property>
-                                                               <property name="value"><number>30</number></property>
-                                                         </widget>
-                                                        </item>
-                                                  </layout>
-                                                 </item>
-
-                                                 <item>
-                                                  <layout class="QHBoxLayout">
-                                                        <item><widget class="QLabel" name="msIterLbl"><property name="text"><string>Max iterations:</string></property></widget></item>
-                                                        <item>
-                                                         <widget class="QSpinBox" name="msIterSpin">
-                                                               <property name="minimum"><number>1</number></property>
-                                                               <property name="maximum"><number>50</number></property>
-                                                               <property name="value"><number>10</number></property>
-                                                         </widget>
-                                                        </item>
-                                                  </layout>
-                                                 </item>
-
-                                                 <item>
-                                                  <widget class="QLabel" name="msInfoLbl">
-                                                        <property name="text"><string>Clusters nearby pixels by joint spatial and color similarity.</string></property>
-                                                        <property name="wordWrap"><bool>true</bool></property>
-                                                        <property name="styleSheet"><string>color:#aaa; font-size:9pt;</string></property>
-                                                  </widget>
-                                                 </item>
-
-                                           </layout>
-                                          </widget>
-                                    </item>
+           <!-- MEAN SHIFT PARAMS GROUP -->
+           <item>
+            <widget class="QGroupBox" name="meanShiftParamsGroup">
+             <property name="title"><string>Mean Shift Parameters</string></property>
+             <property name="visible"><bool>false</bool></property>
+             <layout class="QVBoxLayout">
+              <property name="spacing"><number>8</number></property>
+              <item>
+               <layout class="QHBoxLayout">
+                <item><widget class="QLabel" name="msSpatialLbl"><property name="text"><string>Spatial radius:</string></property></widget></item>
+                <item>
+                 <widget class="QSpinBox" name="msSpatialSpin">
+                  <property name="minimum"><number>1</number></property>
+                  <property name="maximum"><number>50</number></property>
+                  <property name="value"><number>10</number></property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <layout class="QHBoxLayout">
+                <item><widget class="QLabel" name="msColorLbl"><property name="text"><string>Color radius:</string></property></widget></item>
+                <item>
+                 <widget class="QSpinBox" name="msColorSpin">
+                  <property name="minimum"><number>1</number></property>
+                  <property name="maximum"><number>100</number></property>
+                  <property name="value"><number>30</number></property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <layout class="QHBoxLayout">
+                <item><widget class="QLabel" name="msIterLbl"><property name="text"><string>Max iterations:</string></property></widget></item>
+                <item>
+                 <widget class="QSpinBox" name="msIterSpin">
+                  <property name="minimum"><number>1</number></property>
+                  <property name="maximum"><number>50</number></property>
+                  <property name="value"><number>10</number></property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <widget class="QLabel" name="msInfoLbl">
+                <property name="text"><string>Clusters nearby pixels by joint spatial and color similarity.</string></property>
+                <property name="wordWrap"><bool>true</bool></property>
+                <property name="styleSheet"><string>color:#aaa; font-size:9pt;</string></property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
 
            <item><widget class="QFrame" name="segSep3"><property name="frameShape"><enum>QFrame::HLine</enum></property><property name="frameShadow"><enum>QFrame::Sunken</enum></property></widget></item>
 
@@ -531,11 +508,9 @@
         <item>
          <layout class="QVBoxLayout">
           <property name="spacing"><number>6</number></property>
-
           <item>
            <layout class="QHBoxLayout">
             <property name="spacing"><number>8</number></property>
-
             <item>
              <widget class="QFrame" name="segInputFrame">
               <property name="frameShape"><enum>QFrame::StyledPanel</enum></property>
@@ -555,7 +530,6 @@
               </layout>
              </widget>
             </item>
-
             <item>
              <widget class="QFrame" name="segOutputFrame">
               <property name="frameShape"><enum>QFrame::StyledPanel</enum></property>
@@ -575,11 +549,8 @@
               </layout>
              </widget>
             </item>
-
            </layout>
           </item>
-
-          <!-- Legend / info strip below (used by K-Means for cluster swatches) -->
           <item>
            <widget class="QLabel" name="segLegendCanvas">
             <property name="text"><string></string></property>
@@ -589,7 +560,6 @@
             <property name="styleSheet"><string>background-color:#0a0a0a; border:1px solid #333; color:#555; font-size:10pt;</string></property>
            </widget>
           </item>
-
          </layout>
         </item>
 
