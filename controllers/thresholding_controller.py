@@ -29,7 +29,7 @@ from PyQt5.QtWidgets import QFileDialog, QMainWindow
 # Algorithms
 from core.Thresholding.spectral_thresholding import spectral_threshold
 from core.Thresholding.otsu import otsu_threshold
-from core.thresholding.optimal import apply_optimal_threshold
+from core.Thresholding.optimal import apply_optimal_threshold
 
 
 # ─────────────────────────────────────────────────────────────────────────────
