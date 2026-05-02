@@ -4,7 +4,7 @@
 
  <widget class="QMainWindow" name="MainWindow">
   <property name="geometry">
-     <rect><x>0</x><y>0</y><width>1500</width><height>900</height></rect>
+   <rect><x>0</x><y>0</y><width>1300</width><height>820</height></rect>
   </property>
   <property name="windowTitle">
    <string>Vision Toolkit</string>
@@ -17,7 +17,14 @@
 
     <item>
      <widget class="QTabWidget" name="tabWidget">
-          <property name="documentMode"><bool>true</bool></property>
+      <property name="styleSheet">
+       <string>
+QTabWidget::pane { border: 0; }
+QTabBar::tab { background:#000; color:white; padding:10px 25px; border:1px solid #222; font-size:12pt; }
+QTabBar::tab:selected { background:#1e1e1e; border-bottom:2px solid #fff; }
+QTabBar::tab:hover { background:#2a2a2a; }
+       </string>
+      </property>
 
       <!-- ═══════════════ FACE DETECTION TAB ═══════════════ -->
       <widget class="QWidget" name="faceDetectionTab">
@@ -130,7 +137,6 @@
             <widget class="QComboBox" name="threshMethodCombo">
              <item><property name="text"><string>Optimal Thresholding</string></property></item>
              <item><property name="text"><string>Spectral Thresholding</string></property></item>
-              <item><property name="text"><string>Otsu Thresholding</string></property></item>
             </widget>
            </item>
 
@@ -354,7 +360,6 @@
             <widget class="QComboBox" name="segMethodCombo">
              <item><property name="text"><string>K-Means</string></property></item>
              <item><property name="text"><string>Region Growing</string></property></item>
-                                           <item><property name="text"><string>Mean Shift</string></property></item>
             </widget>
            </item>
 
@@ -437,65 +442,6 @@
              </layout>
             </widget>
            </item>
-
-                                    <!-- ── MEAN SHIFT PARAMS GROUP (hidden by default) ── -->
-                                    <item>
-                                          <widget class="QGroupBox" name="meanShiftParamsGroup">
-                                           <property name="title"><string>Mean Shift Parameters</string></property>
-                                           <property name="visible"><bool>false</bool></property>
-                                           <layout class="QVBoxLayout">
-                                                 <property name="spacing"><number>8</number></property>
-
-                                                 <item>
-                                                  <layout class="QHBoxLayout">
-                                                        <item><widget class="QLabel" name="msSpatialLbl"><property name="text"><string>Spatial radius:</string></property></widget></item>
-                                                        <item>
-                                                         <widget class="QSpinBox" name="msSpatialSpin">
-                                                               <property name="minimum"><number>1</number></property>
-                                                               <property name="maximum"><number>50</number></property>
-                                                               <property name="value"><number>10</number></property>
-                                                         </widget>
-                                                        </item>
-                                                  </layout>
-                                                 </item>
-
-                                                 <item>
-                                                  <layout class="QHBoxLayout">
-                                                        <item><widget class="QLabel" name="msColorLbl"><property name="text"><string>Color radius:</string></property></widget></item>
-                                                        <item>
-                                                         <widget class="QSpinBox" name="msColorSpin">
-                                                               <property name="minimum"><number>1</number></property>
-                                                               <property name="maximum"><number>100</number></property>
-                                                               <property name="value"><number>30</number></property>
-                                                         </widget>
-                                                        </item>
-                                                  </layout>
-                                                 </item>
-
-                                                 <item>
-                                                  <layout class="QHBoxLayout">
-                                                        <item><widget class="QLabel" name="msIterLbl"><property name="text"><string>Max iterations:</string></property></widget></item>
-                                                        <item>
-                                                         <widget class="QSpinBox" name="msIterSpin">
-                                                               <property name="minimum"><number>1</number></property>
-                                                               <property name="maximum"><number>50</number></property>
-                                                               <property name="value"><number>10</number></property>
-                                                         </widget>
-                                                        </item>
-                                                  </layout>
-                                                 </item>
-
-                                                 <item>
-                                                  <widget class="QLabel" name="msInfoLbl">
-                                                        <property name="text"><string>Clusters nearby pixels by joint spatial and color similarity.</string></property>
-                                                        <property name="wordWrap"><bool>true</bool></property>
-                                                        <property name="styleSheet"><string>color:#aaa; font-size:9pt;</string></property>
-                                                  </widget>
-                                                 </item>
-
-                                           </layout>
-                                          </widget>
-                                    </item>
 
            <item><widget class="QFrame" name="segSep3"><property name="frameShape"><enum>QFrame::HLine</enum></property><property name="frameShadow"><enum>QFrame::Sunken</enum></property></widget></item>
 

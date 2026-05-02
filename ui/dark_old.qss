@@ -1,0 +1,89 @@
+/* ── Global ───────────────────────────── */
+* {
+    font-family: "Segoe UI";
+    font-size: 12pt;
+    color: #e5e7eb;
+}
+
+QMainWindow, QWidget {
+    background-color: #0f172a;
+}
+
+/* ── Buttons ─────────────────────────── */
+QPushButton {
+    background-color: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 8px 16px;
+}
+
+QPushButton:hover {
+    background-color: #334155;
+}
+
+QPushButton:pressed {
+    background-color: #475569;
+}
+
+QPushButton:disabled {
+    background-color: #111827;
+    color: #4b5563;
+}
+
+/* ── RUN BUTTON (main action) */
+QPushButton#faceBtnRun {
+    background-color: #22c55e;
+    color: white;
+    font-weight: bold;
+}
+
+QPushButton#faceBtnRun:hover {
+    background-color: #4ade80;
+}
+
+/* ── SAVE BUTTON */
+QPushButton#faceBtnSave {
+    background-color: #0ea5e9;
+    color: white;
+}
+
+QPushButton#faceBtnSave:hover {
+    background-color: #38bdf8;
+}
+
+/* ── Labels ─────────────────────────── */
+QLabel {
+    color: #cbd5f5;
+}
+
+/* Canvas */
+QLabel#faceCanvasLabel {
+    background-color: #020617;
+    border: 2px dashed #1e293b;
+    border-radius: 10px;
+    color: #475569;
+}
+
+/* Image name */
+QLabel#faceImageNameLbl {
+    color: #94a3b8;
+}
+
+/* Stats */
+QLabel#faceStatsLbl {
+    color: #a5b4fc;
+}
+
+/* ── SpinBoxes ───────────────────────── */
+QSpinBox, QDoubleSpinBox {
+    background-color: #020617;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    padding: 4px;
+}
+
+/* ── Status bar ─────────────────────── */
+QStatusBar {
+    background-color: #020617;
+    color: #64748b;
+}
