@@ -30,13 +30,14 @@ from PyQt5.QtWidgets import QFileDialog, QMainWindow
 from core.Thresholding.spectral_thresholding import spectral_threshold
 from core.Thresholding.otsu import otsu_threshold
 from core.Thresholding.optimal import apply_optimal_threshold
-
+from core.Thresholding.local_thresholding import local_threshold
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Worker – runs in a QThread, algorithm in a child Process
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _worker_fn(gray: np.ndarray, method: str, n_modes: int, queue: mp.Queue):
+def _worker_fn(gray: np.ndarray, method: str, n_modes: int, queue: mp.Queue, 
+               block_size: int = 11, C: int = 2):
     try:
         method_l = method.lower()
 
@@ -52,6 +53,10 @@ def _worker_fn(gray: np.ndarray, method: str, n_modes: int, queue: mp.Queue):
             result, thresholds = spectral_threshold(gray, n_modes=n_modes)
             queue.put(("spectral", {"result": result, "thresholds": thresholds}))
 
+        elif "local" in method_l:
+            result = local_threshold(gray, block_size=block_size, C=C)
+            queue.put(("local", {"result": result, "thresholds": []}))
+
         else:
             raise ValueError(f"Unknown method: {method}")
 
@@ -62,16 +67,20 @@ def _worker_fn(gray: np.ndarray, method: str, n_modes: int, queue: mp.Queue):
 class _ThresholdWorker(QThread):
     finished = pyqtSignal(str, object)   # (kind, payload)
 
-    def __init__(self, gray: np.ndarray, method: str, n_modes: int):
+    def __init__(self, gray: np.ndarray, method: str, n_modes: int, 
+                 block_size: int = 11, C: int = 2):
         super().__init__()
-        self._gray    = gray
-        self._method  = method
-        self._n_modes = n_modes
+        self._gray       = gray
+        self._method     = method
+        self._n_modes    = n_modes
+        self._block_size = block_size
+        self._C          = C
 
     def run(self):
         q = mp.Queue()
         p = mp.Process(target=_worker_fn,
-                       args=(self._gray, self._method, self._n_modes, q))
+                       args=(self._gray, self._method, self._n_modes, q,
+                             self._block_size, self._C))
         p.start()
         while True:
             if not q.empty():
@@ -112,11 +121,13 @@ class ThresholdingController(QObject):
 
         self._window.optimalParamsGroup.setVisible("optimal" in method)
         self._window.spectralParamsGroup.setVisible("spectral" in method)
+        self._window.localParamsGroup.setVisible("local" in method)
 
         # Otsu has no tunable parameters in this UI.
         if "otsu" in method:
             self._window.optimalParamsGroup.setVisible(False)
             self._window.spectralParamsGroup.setVisible(False)
+            self._window.localParamsGroup.setVisible(False)
 
     # ------------------------------------------------------------------
     def _load_image(self):
@@ -161,13 +172,16 @@ class ThresholdingController(QObject):
 
         method = self._window.threshMethodCombo.currentText()
         n_modes = self._window.spectralModesSpin.value()
+        block_size = self._window.localBlockSizeSpin.value()
+        C = self._window.localConstantSpin.value()
 
         # Disable controls while running
         self._window.threshBtnApply.setEnabled(False)
         self._window.threshBtnLoad.setEnabled(False)
         self._set_status("⏳ Processing…")
 
-        self._worker = _ThresholdWorker(self._gray_image, method, n_modes)
+        self._worker = _ThresholdWorker(self._gray_image, method, n_modes,
+                                       block_size, C)
         self._worker.finished.connect(self._on_result)
         self._worker.start()
 
@@ -231,6 +245,24 @@ class ThresholdingController(QObject):
             self._set_status(
                 f"✅ Spectral done — {n_regions} regions, "
                 f"thresholds: {thresholds}"
+            )
+
+        elif kind == "local":
+            result = payload["result"]
+
+            self._result     = result
+            self._thresholds = []
+            self._show_on_canvas(result, self._window.threshOutputCanvas, gray=True)
+            self._draw_histogram(self._gray_image, [],
+                                 self._window.threshHistCanvas)
+            block_size = self._window.localBlockSizeSpin.value()
+            C = self._window.localConstantSpin.value()
+            self._window.threshResultInfoLbl.setText(
+                f"Block Size: {block_size}  |  Constant (C): {C}"
+            )
+            self._set_status(
+                f"✅ Local (Adaptive) done — "
+                f"Block Size={block_size}, C={C}"
             )
 
         self._window.threshBtnSave.setEnabled(True)

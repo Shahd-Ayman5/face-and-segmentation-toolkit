@@ -27,6 +27,7 @@ from PyQt5.QtWidgets import QFileDialog, QMainWindow, QListWidgetItem
 from core.segmentation.kmeans import apply_kmeans_segmentation
 from core.segmentation.region_growing import region_growing
 from core.segmentation.mean_shift import mean_shift_segmentation
+from core.segmentation.agglomerative import agglomerative_segmentation
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -41,6 +42,8 @@ def _worker_fn(image: np.ndarray,
                ms_spatial_radius: int,
                ms_color_radius: int,
                ms_max_iter: int,
+               aggl_clusters: int,
+               aggl_block_size: int,
                queue: mp.Queue) -> None:
     try:
         method = method.lower()
@@ -70,6 +73,25 @@ def _worker_fn(image: np.ndarray,
                 image, k=km_clusters, random_state=42
             )
             queue.put(("kmeans", seg_result, None))
+        elif "agglomerative" in method:
+            original_h, original_w = image.shape[:2]
+
+            small = cv2.resize(image, (200, 200), interpolation=cv2.INTER_AREA)
+
+            result_small = agglomerative_segmentation(
+                small,
+                n_clusters=aggl_clusters,
+                block_size=aggl_block_size,
+                progress_queue=queue,
+            )
+
+            result = cv2.resize(
+                result_small,
+                (original_w, original_h),
+                interpolation=cv2.INTER_NEAREST,
+            )
+
+            queue.put(("result", result, None))
         else:
             raise ValueError(f"Unknown segmentation method: {method}")
 
@@ -89,7 +111,9 @@ class _SegWorker(QThread):
                  km_clusters,
                  ms_spatial_radius,
                  ms_color_radius,
-                 ms_max_iter):
+                 ms_max_iter,
+                 aggl_clusters=8,
+                 aggl_block_size=4):
         super().__init__()
         self._image             = image
         self._method            = method
@@ -99,6 +123,8 @@ class _SegWorker(QThread):
         self._ms_spatial_radius = ms_spatial_radius
         self._ms_color_radius   = ms_color_radius
         self._ms_max_iter       = ms_max_iter
+        self._aggl_clusters     = aggl_clusters
+        self._aggl_block_size   = aggl_block_size
 
     def run(self):
         q = mp.Queue()
@@ -112,6 +138,8 @@ class _SegWorker(QThread):
                            self._ms_spatial_radius,
                            self._ms_color_radius,
                            self._ms_max_iter,
+                           self._aggl_clusters,
+                           self._aggl_block_size,
                            q,
                        ))
         p.start()
@@ -119,7 +147,8 @@ class _SegWorker(QThread):
             if not q.empty():
                 message = q.get()
                 if isinstance(message, tuple) and message and message[0] == "progress":
-                    self.progress.emit(f"⏳ Mean Shift processing... {message[1]}%")
+                    method_name = self._method
+                    self.progress.emit(f"⏳ {method_name} processing... {message[1]}%")
                     continue
                 self.finished.emit(message)
                 break
@@ -207,6 +236,7 @@ class SegmentationController(QObject):
         self._window.meanShiftParamsGroup.setVisible(
             "mean" in method and "shift" in method
         )
+        self._window.agglomerativeParamsGroup.setVisible("agglomerative" in method)
         if "region" in method:
             self._window.segInputTitleLbl.setText(
                 "Input Image  (click to place seeds)"
@@ -313,6 +343,8 @@ class SegmentationController(QObject):
         ms_spatial_radius = self._window.msSpatialSpin.value()
         ms_color_radius = self._window.msColorSpin.value()
         ms_max_iter = self._window.msIterSpin.value()
+        aggl_clusters = self._window.agglClustersSpin.value()
+        aggl_block_size = self._window.agglBlockSizeSpin.value()
 
         self._window.segBtnApply.setEnabled(False)
         self._window.segBtnLoad.setEnabled(False)
@@ -327,6 +359,8 @@ class SegmentationController(QObject):
             ms_spatial_radius,
             ms_color_radius,
             ms_max_iter,
+            aggl_clusters,
+            aggl_block_size,
         )
         self._worker.progress.connect(self._set_status)
         self._worker.finished.connect(self._on_result)
@@ -396,6 +430,12 @@ class SegmentationController(QObject):
                 f"(spatial={self._window.msSpatialSpin.value()}, "
                 f"color={self._window.msColorSpin.value()}, "
                 f"iter={self._window.msIterSpin.value()})"
+            )
+        elif "agglomerative" in method.lower():
+            self._set_status(
+                "✅ Done — Agglomerative segmentation complete "
+                f"(clusters={self._window.agglClustersSpin.value()}, "
+                f"block_size={self._window.agglBlockSizeSpin.value()})"
             )
         else:
             self._set_status("✅ Done.")
