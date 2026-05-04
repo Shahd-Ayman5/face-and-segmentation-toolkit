@@ -82,7 +82,8 @@ def _compute_roc_macro(
     mean_tpr = np.mean(tprs, axis=0)
     mean_tpr[0] = 0.0
     mean_tpr[-1] = 1.0
-    auc = float(np.trapz(mean_tpr, all_fpr))
+    # auc = float(np.trapz(mean_tpr, all_fpr))
+    auc = float(np.trapezoid(mean_tpr, all_fpr))
     return all_fpr, mean_tpr, auc
 
 
