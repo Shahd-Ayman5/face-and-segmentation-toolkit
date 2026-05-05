@@ -1,20 +1,3 @@
-"""
-spectral_thresholding.py
-------------------------
-Multi-level spectral thresholding using between-class variance maximisation.
-
-Supports N modes (regions) which means N-1 thresholds.
-Works with grayscale NumPy arrays (uint8, H×W).
-
-The algorithm is an extension of Otsu's method:
-  - For 2 regions  → 1 threshold  (standard Otsu)
-  - For 3 regions  → 2 thresholds (low, high)
-  - For N regions  → N-1 thresholds
-
-Each combination of N-1 threshold candidates is scored by the weighted
-between-class variance.  The combination with the maximum score is chosen.
-"""
-
 from __future__ import annotations
 import numpy as np
 from itertools import combinations
@@ -25,20 +8,7 @@ from itertools import combinations
 # ─────────────────────────────────────────────────────────────────────────────
 
 def spectral_threshold(image: np.ndarray, n_modes: int = 3) -> tuple[np.ndarray, list[int]]:
-    """
-    Apply multi-level spectral thresholding to a grayscale image.
-
-    Parameters
-    ----------
-    image   : H×W uint8 grayscale array
-    n_modes : number of output intensity regions (≥ 2).
-              n_modes=3 → two thresholds → three grey levels in the output.
-
-    Returns
-    -------
-    result      : H×W uint8 image with n_modes distinct grey levels
-    thresholds  : sorted list of (n_modes - 1) integer threshold values
-    """
+    
     if image.ndim != 2:
         raise ValueError("spectral_threshold expects a 2-D grayscale image.")
 
@@ -80,12 +50,6 @@ def _global_mean(hist: np.ndarray) -> float:
 def _between_class_variance(hist: np.ndarray,
                             thresholds: list[int],
                             global_mean: float) -> float:
-    """
-    Weighted between-class variance for an arbitrary set of thresholds.
-
-    thresholds: sorted list of k values that split [0,255] into k+1 classes.
-    Class i occupies pixel intensities in [boundaries[i], boundaries[i+1]).
-    """
     boundaries = [0] + thresholds + [256]   # 256 is exclusive upper bound
     n_classes = len(boundaries) - 1
 
@@ -109,12 +73,7 @@ def _between_class_variance(hist: np.ndarray,
 def _find_optimal_thresholds(hist: np.ndarray,
                              global_mean: float,
                              n_thresholds: int) -> list[int]:
-    """
-    Exhaustive search over all combinations of n_thresholds values in [1,254].
 
-    For small n_thresholds (≤ 4) this is fast enough (< 1 s on typical images).
-    For n_thresholds = 5 we still finish in a few seconds.
-    """
     candidates = list(range(1, 255))          # valid threshold range: 1–254
 
     best_var = -1.0
@@ -152,10 +111,7 @@ def _find_optimal_thresholds(hist: np.ndarray,
 def _apply_thresholds(image: np.ndarray,
                       thresholds: list[int],
                       n_modes: int) -> np.ndarray:
-    """
-    Map each pixel to one of n_modes evenly-spaced grey levels.
-    Level 0 → 0, Level n_modes-1 → 255, others interpolated.
-    """
+    
     result = np.zeros_like(image, dtype=np.uint8)
     boundaries = [0] + thresholds + [256]
 

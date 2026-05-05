@@ -1,20 +1,3 @@
-"""
-K-Means Image Segmentation
-===========================
-Pure-NumPy implementation (no sklearn) so it integrates cleanly with the
-rest of the project without extra heavy dependencies.
-
-Supports both grayscale and RGB/BGR images.
-
-Public API
-----------
-kmeans_segment(image, k=3, max_iter=100, tol=1e-4, n_init=3, random_state=None)
-    -> (labels, segmented_image, centroids, inertia, iterations)
-
-apply_kmeans_segmentation(image, k=3, **kwargs)
-    -> dict with keys 'segmented', 'labels', 'centroids', 'inertia', 'iterations'
-"""
-
 import numpy as np
 
 
@@ -91,27 +74,7 @@ def kmeans_segment(
     n_init: int = 3,
     random_state=None,
 ):
-    """
-    Segment *image* into *k* clusters using K-Means.
-
-    Parameters
-    ----------
-    image        : H×W (grayscale) or H×W×3 (colour) uint8 numpy array.
-    k            : Number of clusters / segments.
-    max_iter     : Maximum iterations per run.
-    tol          : Convergence tolerance on centroid shift.
-    n_init       : Number of independent restarts; best result is kept.
-    random_state : int or None – for reproducibility.
-
-    Returns
-    -------
-    labels         : H×W int array with cluster index 0…k-1 per pixel.
-    segmented      : H×W or H×W×3 uint8 image where each pixel is replaced
-                     by its cluster's mean colour.
-    centroids      : (k, D) float64 array of final cluster centres.
-    inertia        : float – within-cluster sum of squared distances.
-    iterations     : int   – iterations used in the best run.
-    """
+    
     if image.ndim not in (2, 3):
         raise ValueError("image must be 2-D (grayscale) or 3-D (colour).")
 
@@ -150,19 +113,7 @@ def kmeans_segment(
 # ---------------------------------------------------------------------------
 
 def apply_kmeans_segmentation(image: np.ndarray, k: int = 3, **kwargs):
-    """
-    Thin wrapper that returns a dict for easy GUI consumption.
-
-    Returns
-    -------
-    dict with keys:
-        'segmented'  : H×W or H×W×3 uint8 segmented image
-        'labels'     : H×W int cluster-label map
-        'centroids'  : (k, D) centroid array
-        'inertia'    : float
-        'iterations' : int
-        'k'          : int (echo back the k used)
-    """
+   
     labels, segmented, centroids, inertia, iterations = kmeans_segment(
         image, k=k, **kwargs
     )

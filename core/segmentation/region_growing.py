@@ -1,17 +1,3 @@
-"""
-region_growing.py
------------------
-Region Growing segmentation for grayscale or colour (BGR/BGRA) images.
-
-Each seed expands into neighbouring pixels whose intensity (or colour)
-is within `threshold` of the *seed pixel's* value.  Every grown region is
-painted a distinct colour so multiple seeds are visually distinguishable.
-
-Public API
-----------
-    region_growing(image, seeds, threshold) -> np.ndarray
-"""
-
 from __future__ import annotations
 
 from collections import deque
@@ -44,20 +30,7 @@ _PALETTE_BGR = [
 def region_growing(image: np.ndarray,
                    seeds: list[tuple[int, int]],
                    threshold: int = 15) -> np.ndarray:
-    """
-    Grow one region per seed point using BFS with 4-connectivity.
-
-    Parameters
-    ----------
-    image     : H×W (gray) or H×W×C (colour, BGR or BGRA) uint8 array
-    seeds     : list of (x, y) pixel coordinates  [x = col, y = row]
-    threshold : max intensity/colour distance from seed to accept a neighbour
-
-    Returns
-    -------
-    result : same shape as `image`, with grown regions painted in distinct
-             colours on top of a darkened copy of the input.
-    """
+    
     if len(seeds) == 0:
         return image.copy()
 

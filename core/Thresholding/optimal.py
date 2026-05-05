@@ -1,15 +1,3 @@
-"""
-Optimal (Iterative) Thresholding
-=================================
-Finds the best global threshold by iteratively splitting the image into
-two classes (background / foreground) and averaging their means until the
-threshold converges.
-
-Public API
-----------
-optimal_threshold(image, max_iter=100, tol=0.5) -> (threshold, binary_image)
-"""
-
 import numpy as np
 
 
@@ -32,22 +20,7 @@ def optimal_threshold(
     max_iter: int = 100,
     tol: float = 0.5,
 ):
-    """
-    Iterative optimal (isodata-style) thresholding.
-
-    Parameters
-    ----------
-    image    : H×W uint8 grayscale numpy array.
-    max_iter : Maximum number of iterations before stopping.
-    tol      : Convergence tolerance (stop when |T_new - T_old| < tol).
-
-    Returns
-    -------
-    threshold    : int   – the final threshold value (0-255).
-    binary_image : H×W uint8 array – 255 for foreground, 0 for background.
-    iterations   : int   – number of iterations actually performed.
-    history      : list[float] – threshold value at every iteration.
-    """
+    
     if image.ndim != 2:
         raise ValueError("optimal_threshold expects a 2-D (grayscale) array.")
 
@@ -80,18 +53,6 @@ def optimal_threshold(
 # ---------------------------------------------------------------------------
 
 def apply_optimal_threshold(image: np.ndarray, **kwargs):
-    """
-    Thin wrapper so the GUI can call a single function and get back the
-    binary result together with metadata for display.
-
-    Returns
-    -------
-    dict with keys:
-        'binary'     : H×W uint8 binary image
-        'threshold'  : int
-        'iterations' : int
-        'history'    : list[float]
-    """
     threshold, binary, iterations, history = optimal_threshold(image, **kwargs)
     return {
         "binary": binary,

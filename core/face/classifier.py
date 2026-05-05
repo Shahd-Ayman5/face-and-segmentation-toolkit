@@ -20,7 +20,7 @@ class MatchResult:
 
 
 class FaceClassifier:
-    def __init__(self, model_path: Optional[str] = None, k: int = 3):
+    def __init__(self, model_path: Optional[str] = None, k: int = 5):
         self._model_path = (
             Path(model_path)
             if model_path

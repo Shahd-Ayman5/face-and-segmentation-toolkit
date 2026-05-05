@@ -9,28 +9,6 @@ def mean_shift_segmentation(
     max_iter=10,
     progress_queue=None
 ):
-    """
-    Mean Shift segmentation.
-
-    Parameters
-    ----------
-    image : np.ndarray
-        Input image (grayscale or color)
-
-    spatial_radius : int
-        Radius for spatial neighborhood
-
-    color_radius : int
-        Radius for color similarity
-
-    max_iter : int
-        Max iterations for shifting
-
-    Returns
-    -------
-    segmented : np.ndarray
-        Segmented image
-    """
 
     img = image.copy()
 
@@ -124,19 +102,3 @@ def mean_shift_segmentation(
         progress_queue.put(("progress", 100))
 
     return output
-
-
-if __name__ == "__main__":
-    img = cv2.imread("image.jpg")
-
-    result = mean_shift_segmentation(
-        img,
-        spatial_radius=12,
-        color_radius=25,
-        max_iter=10
-    )
-
-    cv2.imshow("Original", img)
-    cv2.imshow("Mean Shift", result)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()

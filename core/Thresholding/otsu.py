@@ -3,17 +3,7 @@ import numpy as np
 
 
 def otsu_threshold(image):
-    """
-    Apply Otsu thresholding from scratch.
-
-    Parameters:
-        image: grayscale image as numpy array
-
-    Returns:
-        threshold_value: optimal threshold found by Otsu
-        binary_image: thresholded binary image
-    """
-
+    
     # Compute histogram (256 bins for grayscale)
     hist = np.zeros(256)
 
@@ -34,7 +24,7 @@ def otsu_threshold(image):
 
     # Compute total mean intensity
     for i in range(256):
-        total_mean += i * prob[i]
+        total_mean += i * prob[i]    # mean intensity
 
     cumulative_mean = 0
 
@@ -63,18 +53,3 @@ def otsu_threshold(image):
     binary_image[image <= best_threshold] = 0
 
     return best_threshold, binary_image
-
-
-# Example usage
-if __name__ == "__main__":
-    # Load grayscale image
-    img = cv2.imread("image.jpg", cv2.IMREAD_GRAYSCALE)
-
-    threshold, result = otsu_threshold(img)
-
-    print("Optimal Threshold:", threshold)
-
-    cv2.imshow("Original", img)
-    cv2.imshow("Otsu Result", result)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
