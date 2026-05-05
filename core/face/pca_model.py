@@ -11,7 +11,7 @@ class PCA:
         self.mean = np.mean(X, axis=0)
         X_centered = X - self.mean
 
-        # 2. covariance trick
+        # 2. covariance 
         cov = np.dot(X_centered, X_centered.T)
 
         # 3. eigen decomposition

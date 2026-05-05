@@ -1,20 +1,8 @@
-import cv2
 import numpy as np
 
 
 def local_threshold(image, block_size=11, C=2):
-    """
-    Apply local (adaptive) thresholding from scratch (mean method).
-
-    Parameters:
-        image: grayscale image (numpy array)
-        block_size: size of local window (must be odd)
-        C: constant subtracted from mean
-
-    Returns:
-        binary_image: thresholded image
-    """
-
+   
     # Validate block_size(odd)
     if block_size % 2 == 0:
         raise ValueError("block_size must be odd")
@@ -28,6 +16,7 @@ def local_threshold(image, block_size=11, C=2):
 
     rows, cols = image.shape
 
+    # loop through each pixel in the image
     for i in range(rows):
         for j in range(cols):
 
@@ -40,7 +29,8 @@ def local_threshold(image, block_size=11, C=2):
             # threshold
             T = local_mean - C
 
-            if image[i, j] > T:
+            # decide if the pixel is black or white
+            if image[i, j] > T:  # if pixel value is greater than threshold, set to white
                 binary_image[i, j] = 255
             else:
                 binary_image[i, j] = 0
