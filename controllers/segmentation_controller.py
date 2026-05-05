@@ -43,6 +43,7 @@ def _worker_fn(image: np.ndarray,
                ms_color_radius: int,
                ms_max_iter: int,
                aggl_clusters: int,
+               aggl_block_size: int,
                aggl_alpha: float,
                queue: mp.Queue) -> None:
     try:
@@ -80,6 +81,7 @@ def _worker_fn(image: np.ndarray,
             result_small = agglomerative_segmentation(
                 small,
                 n_clusters=aggl_clusters,
+                block_size=aggl_block_size,
                 alpha=aggl_alpha,
                 progress_queue=queue,
             )
@@ -112,6 +114,7 @@ class _SegWorker(QThread):
                  ms_color_radius,
                  ms_max_iter,
                  aggl_clusters=8,
+                 aggl_block_size=3,
                  aggl_alpha=0.5):
         super().__init__()
         self._image             = image
@@ -123,6 +126,7 @@ class _SegWorker(QThread):
         self._ms_color_radius   = ms_color_radius
         self._ms_max_iter       = ms_max_iter
         self._aggl_clusters     = aggl_clusters
+        self._aggl_block_size   = aggl_block_size
         self._aggl_alpha        = aggl_alpha
 
     def run(self):
@@ -138,6 +142,7 @@ class _SegWorker(QThread):
                            self._ms_color_radius,
                            self._ms_max_iter,
                            self._aggl_clusters,
+                           self._aggl_block_size,
                            self._aggl_alpha,
                            q,
                        ))
@@ -343,6 +348,7 @@ class SegmentationController(QObject):
         ms_color_radius = self._window.msColorSpin.value()
         ms_max_iter = self._window.msIterSpin.value()
         aggl_clusters = self._window.agglClustersSpin.value()
+        aggl_block_size = self._window.agglBlockSizeSpin.value()
         aggl_alpha = float(self._window.agglAlphaSpin.value())
 
         self._window.segBtnApply.setEnabled(False)
@@ -359,6 +365,7 @@ class SegmentationController(QObject):
             ms_color_radius,
             ms_max_iter,
             aggl_clusters,
+            aggl_block_size,
             aggl_alpha,
         )
         self._worker.progress.connect(self._set_status)
@@ -434,6 +441,7 @@ class SegmentationController(QObject):
             self._set_status(
                 "✅ Done — Agglomerative segmentation complete "
                 f"(clusters={self._window.agglClustersSpin.value()}, "
+                f"block={self._window.agglBlockSizeSpin.value()}, "
                 f"alpha={self._window.agglAlphaSpin.value():.2f})"
             )
         else:

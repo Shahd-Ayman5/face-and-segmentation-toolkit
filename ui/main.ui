@@ -540,6 +540,18 @@
               </item>
               <item>
                <layout class="QHBoxLayout">
+                <item><widget class="QLabel" name="agglBlockSizeLbl"><property name="text"><string>Block Size:</string></property></widget></item>
+                <item>
+                 <widget class="QSpinBox" name="agglBlockSizeSpin">
+                  <property name="minimum"><number>2</number></property>
+                  <property name="maximum"><number>30</number></property>
+                  <property name="value"><number>3</number></property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <layout class="QHBoxLayout">
                 <item><widget class="QLabel" name="agglAlphaLbl"><property name="text"><string>Alpha:</string></property></widget></item>
                 <item>
                  <widget class="QDoubleSpinBox" name="agglAlphaSpin">
@@ -547,7 +559,7 @@
                   <property name="minimum"><double>0.00</double></property>
                   <property name="maximum"><double>5.00</double></property>
                   <property name="singleStep"><double>0.10</double></property>
-                  <property name="value"><double>0.30</double></property>
+                  <property name="value"><double>0.20</double></property>
                  </widget>
                 </item>
                </layout>
