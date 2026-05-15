@@ -47,27 +47,7 @@ def _global_mean(hist: np.ndarray) -> float:
     return float(np.dot(intensities, hist) / total)
 
 
-def _between_class_variance(hist: np.ndarray,
-                            thresholds: list[int],
-                            global_mean: float) -> float:
-    boundaries = [0] + thresholds + [256]   # 256 is exclusive upper bound
-    n_classes = len(boundaries) - 1
 
-    total_pixels = hist.sum()
-    if total_pixels == 0:
-        return 0.0
-
-    variance = 0.0
-    for i in range(n_classes):
-        lo, hi = boundaries[i], boundaries[i + 1]
-        region_hist = hist[lo:hi]
-        w = region_hist.sum()
-        if w == 0:
-            continue
-        mean = float(np.dot(np.arange(lo, hi, dtype=np.float64), region_hist) / w)
-        variance += (w / total_pixels) * (mean - global_mean) ** 2
-
-    return variance
 
 
 def _find_optimal_thresholds(hist: np.ndarray,

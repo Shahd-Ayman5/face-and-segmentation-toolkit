@@ -63,10 +63,10 @@ def agglomerative_segmentation(
     def distance(c1, c2):
         dc = c1[:3] - c2[:3]
         ds = c1[3:] - c2[3:]
-        return np.sqrt(np.sum(dc**2) + alpha*np.sum(ds**2))
+        return np.sqrt(np.sum(dc**2) + alpha*np.sum(ds**2)) # how similar the colors are + how close they are (2 clusters)
+    heap = []
 
     neighbors = {i: set() for i in clusters}
-    heap = []
 
     # this loop finds neighboring clusters by looking at the label map and adds their distances to the heap
     for y in range(h):
